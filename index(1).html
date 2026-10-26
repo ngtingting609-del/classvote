@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Class Vote</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--mute:#6b7280;--line:#e3e6ea;--accent:#2f5bea;--bar:#2f5bea;--bar-bg:#e9edfb}
+  @media (prefers-color-scheme:dark){:root{--bg:#111318;--card:#1a1d24;--ink:#eef0f4;--mute:#9aa3b2;--line:#2b303a;--accent:#6c8cff;--bar:#6c8cff;--bar-bg:#252b3d}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+  .wrap.wide{max-width:1000px}
+  h1{font-size:1.4rem;margin:8px 0 4px}
+  h2{font-size:1.25rem;margin:0 0 14px;line-height:1.3}
+  p.sub{color:var(--mute);margin:0 0 18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+  label{display:block;font-weight:600;margin:0 0 6px}
+  input[type=text]{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+  input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .opt{display:flex;gap:8px;margin-bottom:8px}
+  .opt input{flex:1}
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:10px 14px}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button:disabled{opacity:.5;cursor:default}
+  button.x{padding:10px 12px;color:var(--mute)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .choice{display:block;width:100%;text-align:left;padding:15px 16px;margin-bottom:10px;font-size:1.05rem;border-radius:12px}
+  .choice:active{background:var(--bar-bg)}
+  .res{margin-bottom:12px}
+  .res .top{display:flex;justify-content:space-between;gap:12px;margin-bottom:4px}
+  .res .name{font-weight:600}
+  .res .num{color:var(--mute);white-space:nowrap}
+  .track{height:14px;background:var(--bar-bg);border-radius:8px;overflow:hidden}
+  .fill{height:100%;background:var(--bar);width:0;border-radius:8px;transition:width .4s ease}
+  .res.mine .name::after{content:" ✓ your vote";color:var(--accent);font-weight:500;font-size:.85em}
+  .total{color:var(--mute);margin-top:6px}
+  .grid{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;align-items:start}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  #qr{display:flex;justify-content:center;padding:10px;background:#fff;border-radius:12px}
+  #qr svg,#qr img{width:100%;height:auto;max-width:320px;display:block}
+  .link{font:14px/1.4 ui-monospace,Menlo,Consolas,monospace;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;margin:12px 0 8px;user-select:all}
+  .note{color:var(--mute);font-size:.9rem}
+  .ok{color:#15803d;font-weight:600}
+  .err{color:#b91c1c}
+  .status{font-size:.85rem;color:var(--mute);margin-top:10px}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#9ca3af;margin-right:6px}
+  .dot.live{background:#22c55e}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script>
+/* ---------- Config ----------
+   Votes are stored as small messages on a public ntfy topic (no account, no server of your own).
+   To use your own ntfy server, change this one line. */
+const NTFY = "https://ntfy.sh";
+
+/* ---------- Helpers ---------- */
+const $app = document.getElementById("app");
+const el = (t, a = {}, ...kids) => {
+  const n = document.createElement(t);
+  for (const [k, v] of Object.entries(a)) {
+    if (k === "class") n.className = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v);
+  }
+  for (const c of kids.flat()) n.append(c);
+  return n;
+};
+const rid = (n) => {
+  const a = crypto.getRandomValues(new Uint8Array(n));
+  return Array.from(a, (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
+};
+const b64u = {
+  enc: (obj) => {
+    const bytes = new TextEncoder().encode(JSON.stringify(obj));
+    let s = ""; bytes.forEach((b) => (s += String.fromCharCode(b)));
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  },
+  dec: (str) => {
+    const s = atob(str.replace(/-/g, "+").replace(/_/g, "/"));
+    const bytes = Uint8Array.from(s, (c) => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  },
+};
+const store = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+};
+const base = () => location.href.split("#")[0];
+
+function parseHash() {
+  const m = location.hash.match(/^#\/([vrt])\/(.+)$/);
+  if (!m) return { mode: "new" };
+  try {
+    const poll = b64u.dec(m[2]);
+    if (!poll.i || !poll.q || !Array.isArray(poll.o) || poll.o.length < 2) throw 0;
+    return { mode: m[1], poll, payload: m[2] };
+  } catch { return { mode: "bad" }; }
+}
+const topicOf = (poll) => "classvote-" + poll.i;
+
+/* ---------- Live results (shared by all views) ---------- */
+function liveResults(poll, container, opts = {}) {
+  const seen = new Map(); // voter id -> option index (first vote wins => refresh/resend can't double count)
+  const rows = poll.o.map((name) => {
+    const fill = el("div", { class: "fill" });
+    const num = el("span", { class: "num" }, "0");
+    const row = el("div", { class: "res" }, el("div", { class: "top" }, el("span", { class: "name" }, name), num), el("div", { class: "track" }, fill));
+    container.append(row);
+    return { row, fill, num };
+  });
+  const total = el("div", { class: "total" });
+  const status = el("div", { class: "status" }, el("span", { class: "dot" }), el("span", {}, "Connecting…"));
+  container.append(total, status);
+
+  const render = () => {
+    const counts = poll.o.map(() => 0);
+    seen.forEach((o) => counts[o]++);
+    const sum = counts.reduce((a, b) => a + b, 0);
+    rows.forEach((r, i) => {
+      const pct = sum ? Math.round((counts[i] / sum) * 100) : 0;
+      r.fill.style.width = pct + "%";
+      r.num.textContent = counts[i] + " · " + pct + "%";
+      r.row.classList.toggle("mine", opts.mine === i);
+    });
+    total.textContent = sum + (sum === 1 ? " vote" : " votes");
+  };
+  const setStatus = (live, text) => {
+    status.firstChild.className = "dot" + (live ? " live" : "");
+    status.lastChild.textContent = text;
+  };
+  const ingest = (text) => {
+    try {
+      const v = JSON.parse(text);
+      if (typeof v.c === "string" && v.c.length >= 8 && v.c.length <= 40 && Number.isInteger(v.o) && v.o >= 0 && v.o < poll.o.length && !seen.has(v.c)) {
+        seen.set(v.c, v.o);
+        return true;
+      }
+    } catch {}
+    return false;
+  };
+  const url = `${NTFY}/${topicOf(poll)}`;
+  let pollTimer = null;
+  const pollOnce = async () => {
+    try {
+      const r = await fetch(url + "/json?poll=1&since=all");
+      const t = await r.text();
+      let changed = false;
+      t.split("\n").forEach((line) => {
+        if (!line.trim()) return;
+        try { const m = JSON.parse(line); if (m.event === "message" && ingest(m.message)) changed = true; } catch {}
+      });
+      if (changed) render();
+      setStatus(true, "Live (refreshing every 4s)");
+    } catch { setStatus(false, "Offline – retrying…"); }
+  };
+  const startPolling = () => { if (!pollTimer) { pollOnce(); pollTimer = setInterval(pollOnce, 4000); } };
+  let es;
+  try {
+    es = new EventSource(url + "/sse?since=all");
+    es.onopen = () => setStatus(true, "Live");
+    es.onmessage = (e) => {
+      try { const m = JSON.parse(e.data); if (m.event === "message" && ingest(m.message)) render(); } catch {}
+    };
+    es.onerror = () => { setStatus(false, "Reconnecting…"); startPolling(); };
+  } catch { startPolling(); }
+  render();
+  return {
+    addLocal: (c, o) => { if (ingest(JSON.stringify({ c, o }))) render(); },
+    mine: (i) => { opts.mine = i; render(); },
+  };
+}
+
+/* ---------- QR (library loaded from a CDN; the link is always shown as a fallback) ---------- */
+function loadQR() {
+  if (window.qrcode) return Promise.resolve(true);
+  const srcs = [
+    "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js",
+    "https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js",
+  ];
+  return new Promise((resolve) => {
+    const next = (i) => {
+      if (i >= srcs.length) return resolve(false);
+      const s = document.createElement("script");
+      s.src = srcs[i];
+      s.onload = () => resolve(!!window.qrcode);
+      s.onerror = () => next(i + 1);
+      document.head.append(s);
+    };
+    next(0);
+  });
+}
+async function drawQR(text, target) {
+  const ok = await loadQR();
+  if (!ok) { target.replaceChildren(el("p", { class: "note" }, "QR library could not load (offline?). Share the link below instead.")); return; }
+  const q = qrcode(0, "M");
+  q.addData(text);
+  q.make();
+  target.innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+}
+
+/* ---------- Views ---------- */
+function viewNew() {
+  document.title = "Class Vote";
+  $app.className = "wrap";
+  const q = el("input", { type: "text", id: "q", placeholder: "e.g. Which design do you prefer?", maxlength: "140" });
+  const optsBox = el("div");
+  const err = el("p", { class: "err" });
+  const addOpt = (val = "") => {
+    const inp = el("input", { type: "text", maxlength: "60", placeholder: "Option " + (optsBox.children.length + 1), value: val });
+    const rm = el("button", { class: "x", type: "button", title: "Remove", onclick: () => { if (optsBox.children.length > 2) { row.remove(); renum(); } } }, "✕");
+    const row = el("div", { class: "opt" }, inp, rm);
+    optsBox.append(row);
+  };
+  const renum = () => [...optsBox.querySelectorAll("input")].forEach((i, n) => (i.placeholder = "Option " + (n + 1)));
+  addOpt(); addOpt(); addOpt();
+  const addBtn = el("button", { type: "button", onclick: () => { if (optsBox.children.length < 8) { addOpt(); renum(); optsBox.lastChild.firstChild.focus(); } } }, "+ Add option");
+  const go = el("button", { class: "primary", type: "button", onclick: () => {
+    const question = q.value.trim();
+    const options = [...optsBox.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean);
+    if (!question) return (err.textContent = "Please enter a question.");
+    if (options.length < 2) return (err.textContent = "Please enter at least two options.");
+    if (new Set(options.map((o) => o.toLowerCase())).size !== options.length) return (err.textContent = "Options must be different.");
+    const poll = { i: rid(12), q: question, o: options };
+    location.hash = "#/t/" + b64u.enc(poll);
+  } }, "Create vote");
+  $app.replaceChildren(
+    el("h1", {}, "Class Vote"),
+    el("p", { class: "sub" }, "No sign-up. Type a question, get a QR code, project it."),
+    el("div", { class: "card" },
+      el("label", { for: "q" }, "Question"), q,
+      el("label", { style: "margin-top:16px" }, "Options"), optsBox,
+      el("div", { class: "row", style: "margin-top:4px" }, addBtn),
+      err,
+      el("div", { class: "row", style: "margin-top:12px" }, go))
+  );
+  q.focus();
+}
+
+function viewTeacher({ poll, payload }) {
+  document.title = poll.q + " – Class Vote";
+  $app.className = "wrap wide";
+  const voteLink = base() + "#/v/" + payload;
+  const resLink = base() + "#/r/" + payload;
+  const qrBox = el("div", { id: "qr" }, el("p", { class: "note" }, "Loading QR…"));
+  const copy = (txt, btn) => navigator.clipboard?.writeText(txt).then(() => { const o = btn.textContent; btn.textContent = "Copied ✓"; setTimeout(() => (btn.textContent = o), 1500); }).catch(() => {});
+  const b1 = el("button", { onclick: () => copy(voteLink, b1) }, "Copy vote link");
+  const b2 = el("button", { onclick: () => copy(resLink, b2) }, "Copy results link");
+  const resBox = el("div");
+  $app.replaceChildren(
+    el("div", { class: "grid" },
+      el("div", { class: "card" },
+        el("p", { class: "note", style: "margin:0 0 8px" }, "Scan to vote"),
+        qrBox,
+        el("div", { class: "link" }, voteLink),
+        el("div", { class: "row" }, b1, b2),
+        el("p", { class: "note", style: "margin-top:12px" }, "If a scan fails, students can type or open the link above. Keep this page open while voting.")),
+      el("div", { class: "card" }, el("h2", {}, poll.q), resBox)),
+    el("p", { class: "note" }, el("a", { href: "#" }, "← New vote"))
+  );
+  drawQR(voteLink, qrBox);
+  liveResults(poll, resBox);
+}
+
+function viewVote({ poll, payload }) {
+  document.title = poll.q + " – Vote";
+  $app.className = "wrap";
+  const kV = "classvote:voted:" + poll.i;
+  const kC = "classvote:client";
+  let cid = store.get(kC);
+  if (!cid || cid.length < 8) { cid = "c" + rid(16); store.set(kC, cid); }
+  const prev = store.get(kV);
+  const box = el("div");
+  const card = el("div", { class: "card" }, el("h2", {}, poll.q), box);
+  $app.replaceChildren(card, el("p", { class: "note" }, "Votes are anonymous. One vote per device."));
+
+  const showResults = (mine) => {
+    box.replaceChildren(el("p", { class: "ok" }, "✓ Your vote is in. Thank you!"));
+    const resBox = el("div");
+    box.append(resBox);
+    liveResults(poll, resBox, { mine });
+  };
+  if (prev !== null && Number.isInteger(+prev) && +prev < poll.o.length) return showResults(+prev);
+
+  const msg = el("p", { class: "note" });
+  let busy = false;
+  const send = async (idx, attempt = 0) => {
+    try {
+      const r = await fetch(`${NTFY}/${topicOf(poll)}`, { method: "POST", body: JSON.stringify({ c: cid, o: idx }) });
+      if (r.status === 429 && attempt < 12) { // busy (e.g. many phones on one wifi): wait and retry
+        msg.textContent = "Busy, retrying…";
+        await new Promise((res) => setTimeout(res, 3000 + attempt * 1500));
+        return send(idx, attempt + 1);
+      }
+      if (!r.ok) throw new Error(r.status);
+      store.set(kV, String(idx));
+      showResults(idx);
+    } catch (e) {
+      busy = false;
+      box.querySelectorAll("button").forEach((b) => (b.disabled = false));
+      msg.className = "err";
+      msg.textContent = "Couldn't send your vote. Check your connection and tap again.";
+    }
+  };
+  poll.o.forEach((name, idx) => {
+    box.append(el("button", { class: "choice", type: "button", onclick: () => {
+      if (busy) return;
+      busy = true;
+      store.set(kV, String(idx)); // lock immediately so a refresh mid-send can't vote twice
+      box.querySelectorAll("button").forEach((b) => (b.disabled = true));
+      msg.className = "note"; msg.textContent = "Sending…";
+      send(idx);
+    } }, name));
+  });
+  box.append(msg);
+}
+
+function viewResults({ poll }) {
+  document.title = poll.q + " – Results";
+  $app.className = "wrap";
+  const resBox = el("div");
+  $app.replaceChildren(el("div", { class: "card" }, el("h2", {}, poll.q), resBox), el("p", { class: "note" }, "Live results. Votes are anonymous."));
+  liveResults(poll, resBox);
+}
+
+function route() {
+  const r = parseHash();
+  if (r.mode === "new") return viewNew();
+  if (r.mode === "bad") {
+    $app.replaceChildren(el("div", { class: "card" }, el("h2", {}, "This link looks incomplete"), el("p", { class: "note" }, "Ask the teacher for the link again, or "), el("a", { href: "#" }, "create a new vote")));
+    return;
+  }
+  ({ t: viewTeacher, v: viewVote, r: viewResults })[r.mode](r);
+}
+addEventListener("hashchange", () => location.reload());
+route();
+</script>
+</body>
+</html>
