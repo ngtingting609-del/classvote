@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Class Vote</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<style>
+:root{
+  --bg:#f6f7fb;--card:#fff;--text:#14161f;--muted:#646a7d;--line:#e4e6ee;
+  --accent:#4f46e5;--accent-soft:#eef0ff;--accent-text:#fff;--ok:#0f9d6b;--warn:#c2410c;
+  --radius:16px;--shadow:0 1px 2px rgba(20,22,31,.05),0 8px 24px rgba(20,22,31,.06);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1117;--card:#181b24;--text:#eef0f6;--muted:#9aa0b4;--line:#2a2e3b;
+  --accent:#8b85ff;--accent-soft:#25243f;--accent-text:#0f1117;--ok:#34d399;--warn:#fb923c;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;color:var(--text);text-decoration:none}
+.logo{width:32px;height:32px;border-radius:10px;background:var(--accent);display:grid;place-items:center;color:var(--accent-text);font-size:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px}
+h1{font-size:24px;line-height:1.25;margin:0 0 6px}
+h2{font-size:18px;margin:0 0 12px}
+p.sub{color:var(--muted);margin:0 0 20px}
+label{display:block;font-weight:600;font-size:14px;margin:0 0 6px}
+input[type=text],textarea{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;outline:none;transition:border-color .15s,box-shadow .15s}
+textarea{resize:vertical;min-height:72px}
+input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.field{margin-bottom:18px}
+.opt-row{display:flex;gap:8px;margin-bottom:8px}
+.opt-row input{flex:1}
+.icon-btn{flex:none;width:46px;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:12px;font-size:20px;cursor:pointer}
+.icon-btn:hover{color:var(--warn);border-color:var(--warn)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:inherit;font-weight:600;border-radius:12px;padding:12px 18px;border:1px solid transparent;cursor:pointer;text-decoration:none;transition:transform .05s,opacity .15s}
+.btn:active{transform:scale(.98)}
+.btn-primary{background:var(--accent);color:var(--accent-text)}
+.btn-ghost{background:transparent;color:var(--accent);border-color:var(--line)}
+.btn-block{width:100%}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.grid{display:grid;gap:16px}
+@media(min-width:720px){.grid.two{grid-template-columns:280px 1fr}}
+.qr-box{display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px}
+#qr{background:#fff;padding:12px;border-radius:12px;line-height:0}
+#qr img,#qr canvas{width:220px!important;height:220px!important}
+.link{word-break:break-all;font-size:12px;color:var(--muted)}
+.bar{margin-bottom:14px}
+.bar-top{display:flex;justify-content:space-between;gap:12px;font-size:15px;margin-bottom:6px}
+.bar-top b{white-space:nowrap}
+.track{height:12px;background:var(--accent-soft);border-radius:99px;overflow:hidden}
+.fill{height:100%;background:var(--accent);border-radius:99px;width:0;transition:width .5s ease}
+.total{font-size:36px;font-weight:700;line-height:1}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;padding:4px 10px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.live{background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(15,157,107,.5)}70%{box-shadow:0 0 0 8px rgba(15,157,107,0)}100%{box-shadow:0 0 0 0 rgba(15,157,107,0)}}
+.choice{display:flex;align-items:center;gap:12px;width:100%;text-align:left;font:inherit;color:var(--text);background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color .15s,background .15s}
+.choice:hover{border-color:var(--accent)}
+.choice.sel{border-color:var(--accent);background:var(--accent-soft)}
+.radio{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center}
+.choice.sel .radio{border-color:var(--accent)}
+.choice.sel .radio::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.center{text-align:center}
+.big-check{width:64px;height:64px;border-radius:50%;background:var(--ok);color:#fff;display:grid;place-items:center;font-size:32px;margin:8px auto 16px}
+.list-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+.list-item:first-child{border-top:0}
+.list-item a{color:var(--text);font-weight:500;text-decoration:none}
+.err{color:var(--warn);font-size:14px;margin-top:8px;min-height:1px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.present #qr img,.present #qr canvas{width:min(70vh,80vw)!important;height:min(70vh,80vw)!important}
+.present .hide-present{display:none}
+footer{margin-top:24px;text-align:center;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="brand" href="#" id="home"><span class="logo">✓</span>Class Vote</a>
+    <span id="conn" class="pill hide-present"><span class="dot" id="dot"></span><span id="connText">Connecting…</span></span>
+  </header>
+  <main id="app"></main>
+  <footer class="hide-present">Votes are anonymous — no names, no logins.</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+const NS = "classvote-hk-v1";               // topic namespace on the relay
+const BROKERS = ["wss://broker.emqx.io:8084/mqtt","wss://broker.hivemq.com:8884/mqtt"];
+const $app = document.getElementById("app");
+let client = null, brokerIdx = 0, subs = new Map(), pendingPubs = [];
+
+/* ---------- small helpers ---------- */
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const rid = n => { const a = new Uint8Array(n); crypto.getRandomValues(a); return Array.from(a, b => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join(""); };
+const enc = obj => btoa(unescape(encodeURIComponent(JSON.stringify(obj)))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const dec = s => JSON.parse(decodeURIComponent(escape(atob(s.replace(/-/g,"+").replace(/_/g,"/")))));
+const store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+};
+function toast(msg){ const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1800); }
+function baseUrl(){ return location.href.split("#")[0]; }
+
+/* ---------- real-time relay (MQTT over secure websockets) ---------- */
+function setConn(state){
+  const dot = document.getElementById("dot"), txt = document.getElementById("connText");
+  dot.className = "dot" + (state === "live" ? " live" : "");
+  txt.textContent = state === "live" ? "Live" : state === "off" ? "Reconnecting…" : "Connecting…";
+}
+function connect(){
+  if (typeof mqtt === "undefined"){ setConn("off"); return; }
+  const url = BROKERS[brokerIdx % BROKERS.length];
+  let opened = false;
+  client = mqtt.connect(url, { clientId: "cv_" + rid(12), clean: true, connectTimeout: 6000, reconnectPeriod: 2500, keepalive: 30 });
+  client.on("connect", () => {
+    opened = true; setConn("live");
+    for (const t of subs.keys()) client.subscribe(t, { qos: 1 });
+    while (pendingPubs.length){ const p = pendingPubs.shift(); client.publish(p.t, p.m, p.o, p.cb); }
+  });
+  client.on("message", (topic, payload) => {
+    for (const [pat, fn] of subs) if (match(pat, topic)) fn(topic, payload.toString());
+  });
+  client.on("offline", () => setConn("off"));
+  client.on("error", () => setConn("off"));
+  // if the first broker never opens, try the next one
+  setTimeout(() => { if (!opened){ try{ client.end(true); }catch(e){} brokerIdx++; connect(); } }, 8000);
+}
+function match(pat, topic){
+  const p = pat.split("/"), t = topic.split("/");
+  for (let i = 0; i < p.length; i++){ if (p[i] === "#") return true; if (p[i] !== "+" && p[i] !== t[i]) return false; }
+  return p.length === t.length;
+}
+function sub(topic, fn){ subs.set(topic, fn); if (client && client.connected) client.subscribe(topic, { qos: 1 }); }
+function pub(topic, msg, cb){
+  const o = { qos: 1, retain: true };
+  if (client && client.connected) client.publish(topic, msg, o, cb); else pendingPubs.push({ t: topic, m: msg, o, cb });
+}
+function unsubAll(){ if (client && client.connected) for (const t of subs.keys()) client.unsubscribe(t); subs.clear(); }
+
+/* ---------- routing ---------- */
+function route(){
+  unsubAll();
+  document.body.classList.remove("present");
+  const h = location.hash.slice(1);
+  let m;
+  if ((m = h.match(/^\/v\/([a-z0-9]+)\.(.+)$/))) return showVote(m[1], m[2]);
+  if ((m = h.match(/^\/r\/([a-z0-9]+)\.(.+)$/))) return showResults(m[1], m[2]);
+  showCreate();
+}
+window.addEventListener("hashchange", route);
+
+/* ---------- teacher: create poll ---------- */
+function showCreate(){
+  const polls = store.get("cv_polls", []);
+  $app.innerHTML = `
+    <div class="card">
+      <h1>Create a poll</h1>
+      <p class="sub">Type a question and the answer choices. Students vote by scanning a QR code — no login needed.</p>
+      <div class="field"><label for="q">Question</label>
+        <textarea id="q" maxlength="200" placeholder="e.g. Which topic should we review on Friday?"></textarea></div>
+      <div class="field"><label>Answer options</label><div id="opts"></div>
+        <button class="btn btn-ghost" id="addOpt" type="button">+ Add option</button></div>
+      <button class="btn btn-primary btn-block" id="create">Create poll &amp; show QR code</button>
+      <div class="err" id="err"></div>
+    </div>
+    ${polls.length ? `<div class="card" style="margin-top:16px"><h2>Your recent polls</h2>
+      ${polls.slice(0, 8).map(p => `<div class="list-item"><a href="#/r/${p.id}.${p.data}">${esc(p.q)}</a>
+      <span class="muted small">${new Date(p.t).toLocaleDateString()}</span></div>`).join("")}</div>` : ""}`;
+  const opts = document.getElementById("opts");
+  const addRow = (v = "") => {
+    const r = document.createElement("div"); r.className = "opt-row";
+    r.innerHTML = `<input type="text" maxlength="80" placeholder="Option ${opts.children.length + 1}" value="${esc(v)}"><button class="icon-btn" type="button" aria-label="Remove option">×</button>`;
+    r.querySelector("button").onclick = () => { if (opts.children.length > 2) r.remove(); else toast("A poll needs at least 2 options"); };
+    r.querySelector("input").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); addRow(); opts.lastChild.querySelector("input").focus(); } });
+    opts.appendChild(r);
+  };
+  addRow(); addRow(); addRow();
+  document.getElementById("addOpt").onclick = () => { if (opts.children.length >= 10) return toast("Up to 10 options"); addRow(); opts.lastChild.querySelector("input").focus(); };
+  document.getElementById("create").onclick = () => {
+    const q = document.getElementById("q").value.trim();
+    const o = [...opts.querySelectorAll("input")].map(i => i.value.trim()).filter(Boolean);
+    const err = document.getElementById("err");
+    if (!q) return err.textContent = "Please enter a question.";
+    if (o.length < 2) return err.textContent = "Please enter at least two answer options.";
+    const id = rid(10), data = enc({ q, o });
+    const list = store.get("cv_polls", []);
+    list.unshift({ id, data, q, t: Date.now() }); store.set("cv_polls", list.slice(0, 30));
+    store.set("cv_owner_" + id, true);
+    pub(`${NS}/${id}/state`, "open");
+    location.hash = `/r/${id}.${data}`;
+  };
+}
+
+/* ---------- teacher: QR + live results ---------- */
+function showResults(id, data){
+  let poll; try { poll = dec(data); } catch(e){ return showError("This poll link is not valid."); }
+  const voteUrl = `${baseUrl()}#/v/${id}.${data}`;
+  const isOwner = store.get("cv_owner_" + id, false);
+  const votes = new Map();   // anonymous voter token -> option index
+  let closed = false;
+
+  $app.innerHTML = `
+    <div class="grid two">
+      <div class="card qr-box">
+        <h2 style="margin:0">Scan to vote</h2>
+        <div id="qr"></div>
+        <div class="link hide-present" id="voteLink">${esc(voteUrl)}</div>
+        <div class="row hide-present" style="justify-content:center">
+          <button class="btn btn-ghost" id="copy">Copy link</button>
+          <button class="btn btn-ghost" id="present">Full screen</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div><div class="total" id="total">0</div><div class="muted small">votes</div></div>
+          <span class="pill" id="status">Open</span>
+        </div>
+        <h1 style="margin-bottom:18px">${esc(poll.q)}</h1>
+        <div id="bars"></div>
+        <div class="row hide-present" style="margin-top:8px">
+          ${isOwner ? `<button class="btn btn-ghost" id="toggle">Close voting</button>` : ""}
+          <a class="btn btn-ghost" href="#">New poll</a>
+        </div>
+      </div>
+    </div>`;
+
+  // QR code
+  new QRCode(document.getElementById("qr"), { text: voteUrl, width: 440, height: 440, correctLevel: QRCode.CorrectLevel.L, colorDark: "#000000", colorLight: "#ffffff" });
+
+  document.getElementById("copy").onclick = async () => {
+    try { await navigator.clipboard.writeText(voteUrl); toast("Link copied"); } catch(e){ toast("Copy failed — select the link to copy it"); }
+  };
+  document.getElementById("present").onclick = () => {
+    document.body.classList.toggle("present");
+    document.getElementById("present").textContent = document.body.classList.contains("present") ? "Exit full screen" : "Full screen";
+  };
+  document.addEventListener("keydown", function esc_(e){ if (e.key === "Escape") document.body.classList.remove("present"); });
+
+  const tg = document.getElementById("toggle");
+  if (tg) tg.onclick = () => { pub(`${NS}/${id}/state`, closed ? "open" : "closed"); };
+
+  function render(){
+    const counts = poll.o.map(() => 0);
+    for (const v of votes.values()) if (v >= 0 && v < counts.length) counts[v]++;
+    const total = counts.reduce((a, b) => a + b, 0), max = Math.max(1, ...counts);
+    document.getElementById("total").textContent = total;
+    document.getElementById("bars").innerHTML = poll.o.map((o, i) => {
+      const pct = total ? Math.round(counts[i] / total * 100) : 0;
+      return `<div class="bar"><div class="bar-top"><span>${esc(o)}</span><b>${counts[i]} · ${pct}%</b></div>
+        <div class="track"><div class="fill" data-w="${counts[i] / max * 100}"></div></div></div>`;
+    }).join("");
+    requestAnimationFrame(() => document.querySelectorAll(".fill").forEach(f => f.style.width = f.dataset.w + "%"));
+    const st = document.getElementById("status");
+    st.textContent = closed ? "Closed" : "Open";
+    if (tg) tg.textContent = closed ? "Reopen voting" : "Close voting";
+  }
+  render();
+  sub(`${NS}/${id}/v/+`, (topic, msg) => {
+    const token = topic.split("/").pop();
+    if (msg === "") votes.delete(token);
+    else { const n = parseInt(msg, 10); if (!isNaN(n)) votes.set(token, n); }
+    render();
+  });
+  sub(`${NS}/${id}/state`, (t, msg) => { closed = msg === "closed"; render(); });
+}
+
+/* ---------- student: vote ---------- */
+function showVote(id, data){
+  let poll; try { poll = dec(data); } catch(e){ return showError("This poll link is not valid. Please scan the QR code again."); }
+  // random anonymous token kept only on this phone, so the same phone can't vote twice
+  let token = store.get("cv_tok_" + id, null);
+  if (!token){ token = rid(16); store.set("cv_tok_" + id, token); }
+  const prev = store.get("cv_vote_" + id, null);
+  let closed = false, sel = null;
+
+  function done(choice){
+    $app.innerHTML = `<div class="card center">
+      <div class="big-check">✓</div>
+      <h1>Thank you for voting!</h1>
+      <p class="sub">You chose <b>${esc(poll.o[choice])}</b>. Your vote is anonymous.</p>
+      <button class="btn btn-ghost" id="change">Change my vote</button></div>`;
+    document.getElementById("change").onclick = () => { if (closed) return toast("Voting is closed"); form(choice); };
+  }
+  function form(pre){
+    sel = pre ?? null;
+    $app.innerHTML = `<div class="card">
+      <span class="pill" style="margin-bottom:12px">Anonymous vote</span>
+      <h1 style="margin:12px 0 18px">${esc(poll.q)}</h1>
+      <div id="choices">${poll.o.map((o, i) => `<button class="choice${sel === i ? " sel" : ""}" data-i="${i}"><span class="radio"></span><span>${esc(o)}</span></button>`).join("")}</div>
+      <button class="btn btn-primary btn-block" id="submit" ${sel === null ? "disabled" : ""}>Submit vote</button>
+      <div class="err" id="err"></div></div>`;
+    document.querySelectorAll(".choice").forEach(b => b.onclick = () => {
+      sel = +b.dataset.i;
+      document.querySelectorAll(".choice").forEach(x => x.classList.toggle("sel", x === b));
+      document.getElementById("submit").disabled = false;
+    });
+    document.getElementById("submit").onclick = () => {
+      if (closed) return document.getElementById("err").textContent = "Voting has been closed by the teacher.";
+      if (sel === null) return;
+      const btn = document.getElementById("submit"); btn.disabled = true; btn.textContent = "Sending…";
+      const choice = sel;
+      const timer = setTimeout(() => { btn.disabled = false; btn.textContent = "Submit vote"; document.getElementById("err").textContent = "Still connecting — please check your internet and try again."; }, 12000);
+      pub(`${NS}/${id}/v/${token}`, String(choice), (err) => {
+        clearTimeout(timer);
+        if (err){ btn.disabled = false; btn.textContent = "Submit vote"; document.getElementById("err").textContent = "Could not send your vote. Please try again."; return; }
+        store.set("cv_vote_" + id, choice); done(choice);
+      });
+    };
+  }
+  sub(`${NS}/${id}/state`, (t, msg) => {
+    closed = msg === "closed";
+    if (closed && store.get("cv_vote_" + id, null) === null){
+      $app.innerHTML = `<div class="card center"><h1>Voting is closed</h1><p class="sub">${esc(poll.q)}</p></div>`;
+    } else if (!closed && !document.getElementById("choices") && store.get("cv_vote_" + id, null) === null){ form(); }
+  });
+  prev !== null ? done(prev) : form();
+}
+
+function showError(msg){ $app.innerHTML = `<div class="card center"><h1>Oops</h1><p class="sub">${esc(msg)}</p><a class="btn btn-primary" href="#">Go home</a></div>`; }
+
+connect();
+route();
+})();
+</script>
+</body>
+</html>
