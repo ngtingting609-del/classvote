@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Classroom Vote</title>
+  <!-- QRCode.js -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <!-- Firebase (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  <style>
+    :root {
+      --bg: #f0f4f8;
+      --card: #ffffff;
+      --primary: #4f46e5;
+      --primary-light: #eef2ff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --success: #10b981;
+      --danger: #ef4444;
+      --radius: 16px;
+      --shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      animation: fadeUp 0.4s ease-out;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    h1, h2, h3 {
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 24px;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-size: 1rem;
+      font-family: inherit;
+      background: #f8fafc;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    input:focus, textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .option-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+
+    .option-row input {
+      flex: 1;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      font-family: inherit;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      width: 100%;
+    }
+
+    .btn-primary:hover {
+      background: #4338ca;
+    }
+
+    .btn-secondary {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .btn-secondary:hover {
+      background: #e0e7ff;
+    }
+
+    .btn-sm {
+      padding: 8px 12px;
+      font-size: 0.85rem;
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--text-muted);
+      padding: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      line-height: 1;
+      width: 36px;
+      height: 36px;
+    }
+
+    .btn-icon:hover {
+      background: #f1f5f9;
+      border-color: var(--text-muted);
+    }
+
+    .btn-icon.danger {
+      color: var(--danger);
+      border-color: #fecaca;
+    }
+
+    .btn-icon.danger:hover {
+      background: #fef2f2;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* QR */
+    .qr-wrapper {
+      text-align: center;
+      margin-top: 16px;
+    }
+
+    #qrcode {
+      display: inline-block;
+      padding: 8px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+      border: 1px solid var(--border);
+    }
+
+    #qrcode img, #qrcode canvas {
+      border-radius: 6px;
+    }
+
+    .qr-hint {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    /* Results */
+    .results {
+      margin-top: 20px;
+    }
+
+    .result-item {
+      margin-bottom: 14px;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .result-bar-bg {
+      width: 100%;
+      height: 28px;
+      background: #f1f5f9;
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .result-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--primary), #818cf8);
+      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 10px;
+      color: white;
+      font-size: 0.8rem;
+      font-weight: 600;
+      min-width: 2em;
+    }
+
+    .total-votes {
+      text-align: center;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    /* Student voting */
+    .vote-option {
+      display: block;
+      width: 100%;
+      padding: 16px 18px;
+      margin-bottom: 12px;
+      background: var(--card);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 500;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+      color: var(--text);
+      position: relative;
+    }
+
+    .vote-option:hover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .vote-option:active {
+      transform: scale(0.98);
+    }
+
+    .vote-option.selected {
+      border-color: var(--primary);
+      background: var(--primary-light);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+
+    .vote-option .check {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      transition: all 0.15s ease;
+    }
+
+    .vote-option.selected .check {
+      border-color: var(--primary);
+      background: var(--primary);
+      box-shadow: inset 0 0 0 3px white;
+    }
+
+    .vote-success {
+      text-align: center;
+      padding: 32px 0;
+    }
+
+    .vote-success .icon {
+      font-size: 3rem;
+      margin-bottom: 12px;
+    }
+
+    .vote-success h2 {
+      color: var(--success);
+      margin-bottom: 8px;
+    }
+
+    /* Utility */
+    .mt-3 { margin-top: 16px; }
+    .mt-4 { margin-top: 24px; }
+    .mb-2 { margin-bottom: 12px; }
+    .text-center { text-align: center; }
+    .flex-between {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2.5px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+      .container { padding: 18px; }
+      h1 { font-size: 1.35rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app" class="container">
+  <!-- Loading -->
+  <div id="loading" class="text-center mt-4">
+    <div class="spinner"></div>
+    <p class="mt-3" style="color: var(--text-muted);">Loading…</p>
+  </div>
+
+  <!-- Teacher: Create Poll -->
+  <div id="teacher-create" class="hidden">
+    <h1>Create a Poll</h1>
+    <p class="subtitle">Set up a question and options for your class.</p>
+    <div class="field">
+      <label for="question">Question</label>
+      <input type="text" id="question" placeholder="e.g., What should we review next?" maxlength="280" />
+    </div>
+    <div class="field">
+      <label>Options</label>
+      <div id="options-container">
+        <div class="option-row">
+          <input type="text" class="option-input" placeholder="Option 1" maxlength="120" />
+          <button type="button" class="btn-icon danger remove-option" title="Remove">✕</button>
+        </div>
+        <div class="option-row">
+          <input type="text" class="option-input" placeholder="Option 2" maxlength="120" />
+          <button type="button" class="btn-icon danger remove-option" title="Remove">✕</button>
+        </div>
+      </div>
+      <button type="button" id="add-option" class="btn btn-secondary btn-sm mt-3">+ Add Option</button>
+    </div>
+    <button id="create-poll-btn" class="btn btn-primary mt-4">Create Poll & Generate QR</button>
+  </div>
+
+  <!-- Teacher: Active Poll Dashboard -->
+  <div id="teacher-dashboard" class="hidden">
+    <div class="flex-between">
+      <span class="badge">Live</span>
+      <button id="new-poll-btn" class="btn btn-secondary btn-sm">+ New Poll</button>
+    </div>
+    <h2 id="poll-question-display" class="mt-3"></h2>
+    <div class="qr-wrapper">
+      <div id="qrcode"></div>
+      <p class="qr-hint">Scan to vote anonymously</p>
+    </div>
+    <div id="results-container" class="results mt-4">
+      <h3 class="mb-2">Results</h3>
+      <div id="results-list"></div>
+      <p id="total-votes" class="total-votes"></p>
+    </div>
+  </div>
+
+  <!-- Student: Voting View -->
+  <div id="student-vote" class="hidden">
+    <h1 id="student-question"></h1>
+    <p class="subtitle">Tap an option to vote. Your vote is anonymous.</p>
+    <div id="student-options"></div>
+    <div id="vote-success-view" class="vote-success hidden">
+      <div class="icon">✅</div>
+      <h2>Thanks for voting!</h2>
+      <p style="color: var(--text-muted);">Your response has been recorded anonymously.</p>
+    </div>
+  </div>
+
+  <!-- Student: Already Voted / Error -->
+  <div id="student-error" class="hidden text-center">
+    <div class="icon" style="font-size: 3rem; margin-bottom: 12px;">🔒</div>
+    <h2>Already Voted</h2>
+    <p style="color: var(--text-muted);">You have already submitted a vote for this poll.</p>
+  </div>
+</div>
+
+<script>
+  // ============================================================
+  // 1. FIREBASE CONFIGURATION
+  // Replace these with your own Firebase project credentials.
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // ============================================================
+  // 2. STATE & UTILITIES
+  // ============================================================
+  const app = document.getElementById('app');
+  const loadingEl = document.getElementById('loading');
+  const teacherCreateEl = document.getElementById('teacher-create');
+  const teacherDashboardEl = document.getElementById('teacher-dashboard');
+  const studentVoteEl = document.getElementById('student-vote');
+  const studentErrorEl = document.getElementById('student-error');
+
+  let currentPollId = null;
+  let pollListenerRef = null;
+  let resultsListenerRef = null;
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const pollIdFromUrl = urlParams.get('poll');
+
+  // Show/hide views
+  function showView(view) {
+    loadingEl.classList.add('hidden');
+    teacherCreateEl.classList.add('hidden');
+    teacherDashboardEl.classList.add('hidden');
+    studentVoteEl.classList.add('hidden');
+    studentErrorEl.classList.add('hidden');
+    if (view) view.classList.remove('hidden');
+  }
+
+  // Generate a short random ID
+  function generateId(length = 8) {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
+  // Get or create anonymous voter token
+  function getVoterToken(pollId) {
+    const key = 'voter_token_' + pollId;
+    let token = localStorage.getItem(key);
+    if (!token) {
+      token = generateId(16);
+      localStorage.setItem(key, token);
+    }
+    return token;
+  }
+
+  // ============================================================
+  // 3. TEACHER: CREATE POLL
+  // ============================================================
+  const optionsContainer = document.getElementById('options-container');
+  const addOptionBtn = document.getElementById('add-option');
+  const createPollBtn = document.getElementById('create-poll-btn');
+
+  // Add option row
+  addOptionBtn.addEventListener('click', () => {
+    const row = document.createElement('div');
+    row.className = 'option-row';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'option-input';
+    input.placeholder = 'Option ' + (optionsContainer.children.length + 1);
+    input.maxLength = 120;
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn-icon danger remove-option';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remove';
+    row.appendChild(input);
+    row.appendChild(removeBtn);
+    optionsContainer.appendChild(row);
+  });
+
+  // Remove option row (event delegation)
+  optionsContainer.addEventListener('click', (e) => {
+    if (e.target.classList.contains('remove-option')) {
+      if (optionsContainer.children.length > 2) {
+        e.target.closest('.option-row').remove();
+      }
+    }
+  });
+
+  // Create poll
+  createPollBtn.addEventListener('click', async () => {
+    const question = document.getElementById('question').value.trim();
+    const optionInputs = optionsContainer.querySelectorAll('.option-input');
+    const options = [];
+    optionInputs.forEach(inp => {
+      const val = inp.value.trim();
+      if (val) options.push(val);
+    });
+
+    if (!question) {
+      alert('Please enter a question.');
+      return;
+    }
+    if (options.length < 2) {
+      alert('Please provide at least two options.');
+      return;
+    }
+
+    const pollId = generateId(10);
+    const pollData = {
+      question: question,
+      options: options,
+      createdAt: Date.now(),
+      votes: {}
+    };
+
+    try {
+      await db.ref('polls/' + pollId).set(pollData);
+      // Redirect to teacher dashboard with the poll ID in the URL
+      window.location.href = window.location.pathname + '?poll=' + pollId + '&mode=teacher';
+    } catch (err) {
+      console.error('Error creating poll:', err);
+      alert('Failed to create poll. Check console for details.');
+    }
+  });
+
+  // ============================================================
+  // 4. TEACHER: DASHBOARD (REAL-TIME RESULTS)
+  // ============================================================
+  const pollQuestionDisplay = document.getElementById('poll-question-display');
+  const resultsList = document.getElementById('results-list');
+  const totalVotesEl = document.getElementById('total-votes');
+  const qrcodeContainer = document.getElementById('qrcode');
+  const newPollBtn = document.getElementById('new-poll-btn');
+
+  let qrcodeInstance = null;
+
+  function renderTeacherDashboard(pollId, pollData) {
+    showView(teacherDashboardEl);
+    currentPollId = pollId;
+
+    pollQuestionDisplay.textContent = pollData.question;
+
+    // --- QR Code ---
+    const studentUrl = window.location.origin + window.location.pathname + '?poll=' + pollId;
+    qrcodeContainer.innerHTML = '';
+    if (qrcodeInstance) {
+      qrcodeInstance.clear();
+    }
+    qrcodeInstance = new QRCode(qrcodeContainer, {
+      text: studentUrl,
+      width: 180,
+      height: 180,
+      colorDark: '#1e293b',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+
+    // --- Real-time results listener ---
+    if (resultsListenerRef) {
+      resultsListenerRef.off();
+    }
+
+    resultsListenerRef = db.ref('polls/' + pollId);
+    resultsListenerRef.on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      const votes = data.votes || {};
+      const options = data.options || [];
+      const counts = options.map(() => 0);
+
+      Object.values(votes).forEach(voteIndex => {
+        if (typeof voteIndex === 'number' && voteIndex >= 0 && voteIndex < counts.length) {
+          counts[voteIndex]++;
+        }
+      });
+
+      const total = counts.reduce((a, b) => a + b, 0);
+
+      // Render bars
+      resultsList.innerHTML = '';
+      options.forEach((opt, idx) => {
+        const pct = total === 0 ? 0 : Math.round((counts[idx] / total) * 100);
+        const item = document.createElement('div');
+        item.className = 'result-item';
+        item.innerHTML = `
+          <div class="result-header">
+            <span>${escapeHtml(opt)}</span>
+            <span>${counts[idx]} vote${counts[idx] !== 1 ? 's' : ''} (${pct}%)</span>
+          </div>
+          <div class="result-bar-bg">
+            <div class="result-bar-fill" style="width: ${pct}%;">${pct > 10 ? pct + '%' : ''}</div>
+          </div>
+        `;
+        resultsList.appendChild(item);
+      });
+
+      totalVotesEl.textContent = `Total votes: ${total}`;
+    });
+  }
+
+  // "New Poll" button (teacher)
+  newPollBtn.addEventListener('click', () => {
+    if (resultsListenerRef) resultsListenerRef.off();
+    window.location.href = window.location.pathname;
+  });
+
+  // ============================================================
+  // 5. STUDENT: VOTING VIEW
+  // ============================================================
+  const studentQuestionEl = document.getElementById('student-question');
+  const studentOptionsEl = document.getElementById('student-options');
+  const voteSuccessView = document.getElementById('vote-success-view');
+
+  function renderStudentVote(pollId, pollData) {
+    showView(studentVoteEl);
+    currentPollId = pollId;
+
+    studentQuestionEl.textContent = pollData.question;
+    studentOptionsEl.innerHTML = '';
+    voteSuccessView.classList.add('hidden');
+
+    const options = pollData.options || [];
+    options.forEach((opt, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'vote-option';
+      btn.type = 'button';
+      btn.innerHTML = `${escapeHtml(opt)} <span class="check"></span>`;
+      btn.addEventListener('click', () => handleVote(pollId, idx, btn));
+      studentOptionsEl.appendChild(btn);
+    });
+  }
+
+  async function handleVote(pollId, optionIndex, btnEl) {
+    // Prevent double-click
+    if (btnEl.classList.contains('selected')) return;
+    btnEl.classList.add('selected');
+    // Disable all buttons
+    studentOptionsEl.querySelectorAll('.vote-option').forEach(b => b.disabled = true);
+
+    const token = getVoterToken(pollId);
+
+    try {
+      // Check if this token already voted
+      const voteRef = db.ref('polls/' + pollId + '/votes/' + token);
+      const snapshot = await voteRef.once('value');
+      if (snapshot.exists()) {
+        showView(studentErrorEl);
+        return;
+      }
+      // Write vote
+      await voteRef.set(optionIndex);
+      // Show success
+      studentOptionsEl.classList.add('hidden');
+      voteSuccessView.classList.remove('hidden');
+    } catch (err) {
+      console.error('Vote error:', err);
+      alert('Something went wrong. Please try again.');
+      btnEl.classList.remove('selected');
+      studentOptionsEl.querySelectorAll('.vote-option').forEach(b => b.disabled = false);
+    }
+  }
+
+  // ============================================================
+  // 6. ROUTER / INIT
+  // ============================================================
+  function init() {
+    if (!pollIdFromUrl) {
+      // No poll ID: teacher create mode
+      showView(teacherCreateEl);
+      return;
+    }
+
+    const mode = urlParams.get('mode');
+    const isTeacher = mode === 'teacher';
+
+    // Fetch poll data
+    db.ref('polls/' + pollIdFromUrl).once('value').then((snapshot) => {
+      const pollData = snapshot.val();
+      if (!pollData) {
+        showView(studentErrorEl);
+        studentErrorEl.querySelector('h2').textContent = 'Poll Not Found';
+        studentErrorEl.querySelector('p').textContent = 'This poll may have been removed.';
+        return;
+      }
+
+      if (isTeacher) {
+        renderTeacherDashboard(pollIdFromUrl, pollData);
+      } else {
+        // Student mode: check if already voted (client-side quick check)
+        const token = getVoterToken(pollIdFromUrl);
+        db.ref('polls/' + pollIdFromUrl + '/votes/' + token).once('value').then((voteSnap) => {
+          if (voteSnap.exists()) {
+            showView(studentErrorEl);
+          } else {
+            renderStudentVote(pollIdFromUrl, pollData);
+          }
+        });
+      }
+    }).catch((err) => {
+      console.error('Error loading poll:', err);
+      showView(studentErrorEl);
+      studentErrorEl.querySelector('h2').textContent = 'Connection Error';
+      studentErrorEl.querySelector('p').textContent = 'Could not load the poll. Check your internet and Firebase config.';
+    });
+  }
+
+  // Escape HTML to prevent XSS
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Start
+  init();
+</script>
+</body>
+</html>
