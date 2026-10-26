@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#4f46e5">
+  <title>ClassVote — Classroom Polls</title>
+  <style>
+    :root{--bg:#f5f7fb;--card:#fff;--ink:#172033;--muted:#697386;--brand:#4f46e5;--line:#e5e9f2;--good:#0f9f6e}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    header{padding:26px 18px;background:linear-gradient(120deg,#4338ca,#7c3aed);color:#fff}
+    .wrap{max-width:960px;margin:auto;padding:0 16px} .brand{font-weight:800;font-size:1.35rem;letter-spacing:-.03em}
+    header p{margin:6px 0 0;color:#e5e7ff}.layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:24px auto 48px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 8px 24px #26345b0a;min-width:0}
+    h1,h2,h3{margin:0 0 12px;letter-spacing:-.025em}h2{font-size:1.2rem}label{display:block;font-weight:650;margin:14px 0 6px}
+    input[type=text],textarea{width:100%;border:1px solid #d7ddea;border-radius:10px;padding:12px 13px;font:inherit;background:#fff;color:var(--ink)}
+    input:focus,textarea:focus{outline:3px solid #c7d2fe;border-color:var(--brand)}.option-row{display:flex;gap:8px;margin:8px 0}
+    .option-row input{flex:1;min-width:0;border:1px solid #d7ddea;border-radius:10px;padding:11px;font:inherit}
+    button{border:0;border-radius:10px;padding:11px 15px;font:inherit;font-weight:700;cursor:pointer}
+    button:focus-visible{outline:3px solid #a5b4fc;outline-offset:2px}.primary{background:var(--brand);color:white}.secondary{background:#eef2ff;color:#3730a3}.remove{background:#fff0f0;color:#b42318;padding:8px 11px}
+    .full{width:100%;margin-top:14px}.hint,.muted{color:var(--muted);font-size:.9rem}.pill{display:inline-block;background:#ecfdf5;color:#047857;border-radius:99px;padding:4px 9px;font-size:.8rem;font-weight:700}
+    #qr{display:block;max-width:100%;height:auto;margin:12px auto;border:1px solid var(--line);border-radius:12px;padding:8px;background:white}
+    .share-url{overflow-wrap:anywhere;background:#f8fafc;border:1px solid var(--line);padding:10px;border-radius:10px;font-size:.9rem}
+    .answer{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:12px;padding:13px;margin:10px 0;cursor:pointer}
+    .answer input{margin-top:5px;accent-color:var(--brand)}.answer:has(input:checked){border-color:var(--brand);background:#f5f3ff}
+    .barrow{margin:16px 0}.barlabel{display:flex;justify-content:space-between;gap:10px;font-size:.92rem;margin-bottom:6px}.bar{height:10px;background:#edf0f7;border-radius:99px;overflow:hidden}.fill{height:100%;background:linear-gradient(90deg,#4f46e5,#8b5cf6);width:0;transition:width .25s}
+    .notice{padding:12px;border-radius:10px;background:#fffbeb;color:#92400e;font-size:.9rem;margin-top:12px}
+    .success{background:#ecfdf5;color:#065f46}.hidden{display:none!important}.footer{text-align:center;color:var(--muted);font-size:.85rem;padding:0 16px 28px}
+    @media(max-width:720px){.layout{grid-template-columns:1fr;margin-top:16px}.card{padding:18px}header{padding:22px 0}}
+  </style>
+</head>
+<body>
+<header><div class="wrap"><div class="brand">✦ ClassVote</div><p>Quick, anonymous classroom polls.</p></div></header>
+<main class="wrap layout">
+  <section class="card" id="createCard">
+    <h2>Create a poll</h2>
+    <p class="muted">Enter a question and at least two answer choices.</p>
+    <label for="question">Question</label>
+    <input id="question" type="text" maxlength="180" placeholder="e.g. Which topic should we review?" autocomplete="off">
+    <label>Answer options</label>
+    <div id="options">
+      <div class="option-row"><input type="text" maxlength="100" placeholder="Option 1"><button class="remove" type="button" aria-label="Remove option" disabled>×</button></div>
+      <div class="option-row"><input type="text" maxlength="100" placeholder="Option 2"><button class="remove" type="button" aria-label="Remove option" disabled>×</button></div>
+    </div>
+    <button class="secondary" id="addOption" type="button">＋ Add option</button>
+    <button class="primary full" id="createPoll" type="button">Create poll & generate QR</button>
+    <div class="notice">Demo mode: this file creates a shareable QR and saves votes in this browser only. Cross-device live voting requires connecting a database and deploying the site (instructions are included below).</div>
+  </section>
+
+  <section class="card" id="shareCard">
+    <h2>Share with students</h2>
+    <p class="muted">Create a poll to generate its QR code and student link.</p>
+    <div id="shareEmpty" class="muted">Your QR code will appear here.</div>
+    <div id="shareContent" class="hidden">
+      <img id="qr" alt="QR code for the student voting page" width="220" height="220">
+      <div class="share-url" id="shareUrl"></div>
+      <button class="secondary full" id="copyLink" type="button">Copy student link</button>
+      <button class="secondary full" id="openStudent" type="button">Preview student page</button>
+    </div>
+  </section>
+
+  <section class="card hidden" id="voteCard">
+    <span class="pill">Anonymous vote</span>
+    <h2 id="voteQuestion" style="margin-top:12px"></h2>
+    <p class="muted">Choose one answer. Your name is not requested.</p>
+    <form id="voteForm"><div id="voteOptions"></div><button class="primary full" type="submit">Submit vote</button></form>
+    <p id="voteMessage" class="muted" aria-live="polite"></p>
+  </section>
+
+  <section class="card hidden" id="resultsCard">
+    <h2>Live results <span class="pill" id="totalVotes">0 votes</span></h2>
+    <p class="muted">Results update in this browser in demo mode.</p>
+    <div id="results"></div>
+    <button class="secondary full" id="resetVotes" type="button">Reset demo votes</button>
+  </section>
+</main>
+<div class="footer">ClassVote · Simple by design · Anonymous by default</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const state = { poll: null, votes: {} };
+  const params = new URLSearchParams(location.search);
+  const encode = obj => btoa(unescape(encodeURIComponent(JSON.stringify(obj)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  const decode = str => JSON.parse(decodeURIComponent(escape(atob(str.replace(/-/g,'+').replace(/_/g,'/')))));
+  function currentUrl(poll) {
+    const url = new URL(location.href);
+    url.search = ''; url.hash = '';
+    url.searchParams.set('poll', encode(poll));
+    return url.toString();
+  }
+  function addOption(value='') {
+    const count = $('options').children.length;
+    if (count >= 8) return;
+    const row = document.createElement('div'); row.className = 'option-row';
+    const input = document.createElement('input'); input.type='text'; input.maxLength=100;
+    input.placeholder = `Option ${count+1}`; input.value = value; input.setAttribute('aria-label', `Option ${count+1}`);
+    const remove = document.createElement('button'); remove.type='button'; remove.className='remove'; remove.textContent='×'; remove.setAttribute('aria-label','Remove option');
+    remove.addEventListener('click', () => { row.remove(); renumber(); });
+    row.append(input,remove); $('options').append(row); renumber();
+  }
+  function renumber() {
+    [...$('options').children].forEach((row,i) => {
+      row.querySelector('input').placeholder = `Option ${i+1}`;
+      row.querySelector('input').setAttribute('aria-label', `Option ${i+1}`);
+      row.querySelector('.remove').disabled = $('options').children.length <= 2;
+    });
+    $('addOption').disabled = $('options').children.length >= 8;
+  }
+  function showPoll(poll, isStudent=false) {
+    state.poll = poll;
+    state.votes = JSON.parse(localStorage.getItem('classvote-votes-'+poll.id) || '{}');
+    $('voteCard').classList.remove('hidden'); $('resultsCard').classList.remove('hidden');
+    $('voteQuestion').textContent = poll.question;
+    $('voteOptions').replaceChildren();
+    poll.options.forEach((option,i) => {
+      const label = document.createElement('label'); label.className='answer';
+      const radio = document.createElement('input'); radio.type='radio'; radio.name='choice'; radio.value=String(i); radio.required=true;
+      const text = document.createElement('span'); text.textContent=option;
+      label.append(radio,text); $('voteOptions').append(label);
+    });
+    if (isStudent) { $('createCard').classList.add('hidden'); $('shareCard').classList.add('hidden'); }
+    renderResults();
+  }
+  function renderResults() {
+    if (!state.poll) return;
+    const counts = state.poll.options.map((_,i)=>Object.values(state.votes).filter(v=>v===i).length);
+    const total = counts.reduce((a,b)=>a+b,0);
+    $('totalVotes').textContent = `${total} vote${total===1?'':'s'}`;
+    $('results').replaceChildren();
+    state.poll.options.forEach((name,i)=>{
+      const row=document.createElement('div'); row.className='barrow';
+      const label=document.createElement('div'); label.className='barlabel';
+      const n=document.createElement('span'); n.textContent=name;
+      const count=document.createElement('strong'); count.textContent=`${counts[i]} · ${total?Math.round(counts[i]/total*100):0}%`;
+      label.append(n,count);
+      const bar=document.createElement('div'); bar.className='bar';
+      const fill=document.createElement('div'); fill.className='fill'; fill.style.width=(total?counts[i]/total*100:0)+'%';
+      bar.append(fill); row.append(label,bar); $('results').append(row);
+    });
+  }
+  $('addOption').addEventListener('click',()=>addOption());
+  $('createPoll').addEventListener('click',()=>{
+    const question=$('question').value.trim();
+    const options=[...$('options').querySelectorAll('input')].map(i=>i.value.trim()).filter(Boolean);
+    if(!question){alert('Please enter a question.');return;}
+    if(options.length<2){alert('Please enter at least two non-empty options.');return;}
+    const poll={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),question,options,createdAt:Date.now()};
+    const url=currentUrl(poll);
+    $('shareEmpty').classList.add('hidden'); $('shareContent').classList.remove('hidden');
+    $('shareUrl').textContent=url;
+    $('qr').src='https://api.qrserver.com/v1/create-qr-code/?size=220x220&data='+encodeURIComponent(url);
+    $('qr').onerror=()=>{$('shareEmpty').textContent='QR image could not load. Copy the student link instead.';$('shareEmpty').classList.remove('hidden');};
+    $('openStudent').onclick=()=>window.open(url,'_blank','noopener');
+    $('copyLink').onclick=async()=>{try{await navigator.clipboard.writeText(url);$('copyLink').textContent='Copied!';}catch(e){prompt('Copy this student link:',url)}};
+    showPoll(poll,false);
+    history.replaceState({},'',location.pathname);
+  });
+  $('voteForm').addEventListener('submit',e=>{
+    e.preventDefault(); if(!state.poll)return;
+    const choice=$('voteOptions').querySelector('input[name=choice]:checked');
+    if(!choice)return;
+    // Demo-only duplicate protection in this browser; not secure across devices.
+    const voterKey='classvote-voted-'+state.poll.id;
+    if(localStorage.getItem(voterKey)){ $('voteMessage').textContent='A vote has already been recorded in this browser for this poll.';return; }
+    state.votes[crypto.randomUUID?crypto.randomUUID():String(Date.now())]=Number(choice.value);
+    localStorage.setItem('classvote-votes-'+state.poll.id,JSON.stringify(state.votes));
+    localStorage.setItem(voterKey,'1');
+    $('voteMessage').textContent='Thanks! Your demo vote has been recorded on this device.';
+    [...$('voteOptions').querySelectorAll('input')].forEach(i=>i.disabled=true);
+    $('voteForm').querySelector('button').disabled=true; renderResults();
+  });
+  $('resetVotes').addEventListener('click',()=>{
+    if(!state.poll)return;
+    if(!confirm('Clear demo votes saved in this browser?'))return;
+    localStorage.removeItem('classvote-votes-'+state.poll.id);
+    localStorage.removeItem('classvote-voted-'+state.poll.id);
+    state.votes={}; $('voteMessage').textContent='Demo votes reset.'; $('voteForm').querySelector('button').disabled=false;
+    [...$('voteOptions').querySelectorAll('input')].forEach(i=>i.disabled=false); renderResults();
+  });
+  if(params.has('poll')){
+    try { showPoll(decode(params.get('poll')),true); $('voteForm').querySelector('button').disabled=false; }
+    catch(e){ $('voteQuestion').textContent='This poll link is invalid or incomplete.'; $('voteCard').classList.remove('hidden'); }
+  }
+})();
+</script>
+</body>
+</html>
