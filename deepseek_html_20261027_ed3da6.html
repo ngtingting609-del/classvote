@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>课堂匿名投票 · 点对点实时</title>
+    <!-- QR Code 生成库 (qrcode-generator) -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+    <!-- PeerJS：WebRTC 点对点通信 -->
+    <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --bg: #f5f7fb;
+            --surface: #ffffff;
+            --primary: #2563eb;
+            --primary-soft: #dbeafe;
+            --text: #0f172a;
+            --muted: #64748b;
+            --border: #e2e8f0;
+            --danger: #ef4444;
+            --success: #10b981;
+            --radius: 16px;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 680px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 24px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .subtitle {
+            color: var(--muted);
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1.5px solid var(--border);
+            color: var(--text);
+        }
+
+        .btn-outline:hover {
+            background: #f8fafc;
+        }
+
+        .btn-block {
+            width: 100%;
+        }
+
+        .btn-sm {
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            border-radius: 10px;
+        }
+
+        .input-group {
+            margin-bottom: 14px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--muted);
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+            background: #fafafa;
+        }
+
+        .input-group input:focus {
+            border-color: var(--primary);
+            background: white;
+        }
+
+        .option-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .option-row input {
+            flex: 1;
+            padding: 12px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            font-size: 0.95rem;
+            outline: none;
+            background: #fafafa;
+        }
+
+        .option-row input:focus {
+            border-color: var(--primary);
+            background: white;
+        }
+
+        .remove-option {
+            background: transparent;
+            border: none;
+            color: var(--danger);
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 8px;
+            line-height: 1;
+        }
+
+        .remove-option:hover {
+            background: #fef2f2;
+        }
+
+        .qr-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+        }
+
+        .qr-wrapper {
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 0 0 1px var(--border);
+            margin-bottom: 12px;
+            display: inline-block;
+        }
+
+        .qr-wrapper svg {
+            display: block;
+            width: 220px;
+            height: 220px;
+        }
+
+        .room-code-display {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: var(--primary);
+            background: var(--primary-soft);
+            padding: 6px 20px;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            font-family: monospace;
+        }
+
+        .hint {
+            font-size: 0.8rem;
+            color: var(--muted);
+            text-align: center;
+            max-width: 280px;
+        }
+
+        .results-list {
+            margin-top: 8px;
+        }
+
+        .result-item {
+            margin-bottom: 14px;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .result-count {
+            color: var(--muted);
+            font-weight: 400;
+        }
+
+        .progress-track {
+            height: 10px;
+            background: #eef2f6;
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--primary);
+            border-radius: 99px;
+            transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+            width: 0%;
+        }
+
+        .badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 99px;
+            background: var(--primary-soft);
+            color: var(--primary);
+        }
+
+        .vote-option-btn {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            margin-bottom: 10px;
+            background: white;
+            border: 1.5px solid var(--border);
+            border-radius: 14px;
+            font-size: 1rem;
+            font-weight: 500;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.15s;
+            color: var(--text);
+        }
+
+        .vote-option-btn:hover {
+            border-color: var(--primary);
+            background: #f8faff;
+        }
+
+        .vote-option-btn:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+        .vote-option-btn.selected {
+            border-color: var(--primary);
+            background: var(--primary-soft);
+            box-shadow: 0 0 0 1px var(--primary);
+        }
+
+        .status-msg {
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            margin-top: 12px;
+        }
+
+        .status-info {
+            background: #eff6ff;
+            color: #1e40af;
+        }
+
+        .status-error {
+            background: #fef2f2;
+            color: #991b1b;
+        }
+
+        .status-success {
+            background: #ecfdf5;
+            color: #065f46;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 20px 0;
+        }
+
+        .footer-note {
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--muted);
+            padding: 20px 0;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 移动端优化 */
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+            .card {
+                padding: 18px;
+            }
+            h1 {
+                font-size: 1.3rem;
+            }
+            .qr-wrapper svg {
+                width: 180px;
+                height: 180px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+
+        <!-- ==================== 入口选择 ==================== -->
+        <div id="view-entry" class="card">
+            <h1>🗳️ 课堂投票</h1>
+            <p class="subtitle">匿名 · 实时 · 无需登录</p>
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+                <button id="btn-teacher-entry" class="btn btn-primary btn-block">👩‍🏫 教师创建投票</button>
+                <button id="btn-student-entry" class="btn btn-outline btn-block">🧑‍🎓 学生输入房间码</button>
+            </div>
+            <div id="student-join-section" class="hidden" style="margin-top: 16px;">
+                <div class="input-group">
+                    <label>输入 6 位房间码</label>
+                    <input type="text" id="input-room-code" placeholder="例如：AB3K9M" maxlength="6" autocomplete="off" style="text-transform: uppercase; letter-spacing: 0.15em; font-size: 1.1rem; text-align: center;">
+                </div>
+                <button id="btn-student-join" class="btn btn-primary btn-block">进入投票</button>
+            </div>
+            <div class="footer-note">基于 PeerJS WebRTC 点对点技术 · 无后端数据库</div>
+        </div>
+
+        <!-- ==================== 教师创建视图 ==================== -->
+        <div id="view-teacher-create" class="card hidden">
+            <h2>✏️ 创建投票</h2>
+            <p class="subtitle">输入问题和选项，生成二维码后学生扫码即可投票</p>
+
+            <div class="input-group">
+                <label>投票问题</label>
+                <input type="text" id="input-question" placeholder="例如：今天中午吃什么？" maxlength="80">
+            </div>
+
+            <div style="margin-bottom: 6px;">
+                <label style="font-size: 0.85rem; font-weight: 600; color: var(--muted);">选项（至少 2 个，最多 6 个）</label>
+            </div>
+            <div id="options-container">
+                <div class="option-row">
+                    <input type="text" class="option-input" placeholder="选项 1" maxlength="40">
+                    <button class="remove-option" onclick="removeOption(this)" title="删除">✕</button>
+                </div>
+                <div class="option-row">
+                    <input type="text" class="option-input" placeholder="选项 2" maxlength="40">
+                    <button class="remove-option" onclick="removeOption(this)" title="删除">✕</button>
+                </div>
+            </div>
+            <button id="btn-add-option" class="btn btn-outline btn-sm" style="margin-bottom: 18px;">+ 添加选项</button>
+
+            <button id="btn-create-poll" class="btn btn-primary btn-block">生成投票 & 二维码</button>
+            <div id="create-status" class="status-msg hidden"></div>
+        </div>
+
+        <!-- ==================== 教师控制台（二维码 + 实时结果） ==================== -->
+        <div id="view-teacher-console" class="hidden">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <h2 style="margin-bottom: 0;">📊 实时结果</h2>
+                    <span id="host-connection-badge" class="badge">等待连接</span>
+                </div>
+                <p id="console-question" style="font-weight: 600; margin: 12px 0 4px; font-size: 1.05rem;"></p>
+
+                <div class="qr-area">
+                    <div class="qr-wrapper" id="qr-container"></div>
+                    <div class="room-code-display" id="display-room-code">------</div>
+                    <p class="hint">学生扫描二维码，或手动输入房间码</p>
+                </div>
+
+                <div class="divider"></div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); margin-bottom: 8px;">
+                    <span>选项</span>
+                    <span>票数</span>
+                </div>
+                <div id="results-container" class="results-list"></div>
+                <div style="margin-top: 16px; font-size: 0.85rem; color: var(--muted); text-align: center;">
+                    总票数：<strong id="total-votes">0</strong>
+                </div>
+            </div>
+            <div class="card" style="padding: 16px;">
+                <p style="font-size: 0.8rem; color: var(--muted); margin-bottom: 8px;">⚠️ 请保持此页面处于打开状态，关闭将终止投票连接。</p>
+                <button id="btn-close-poll" class="btn btn-outline btn-sm" style="color: var(--danger); border-color: var(--danger);">结束投票并断开连接</button>
+            </div>
+        </div>
+
+        <!-- ==================== 学生投票视图 ==================== -->
+        <div id="view-student-vote" class="card hidden">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span class="badge" id="student-room-badge">房间 ------</span>
+                <span id="student-connection-status" style="font-size: 0.75rem; color: var(--muted);">连接中…</span>
+            </div>
+            <h2 id="student-question" style="margin-top: 12px;">加载中…</h2>
+            <p class="subtitle">点击选项进行投票，每人限投一次</p>
+
+            <div id="student-options-container"></div>
+
+            <div id="student-status" class="status-msg hidden"></div>
+
+            <div id="student-results-mini" class="hidden" style="margin-top: 20px;">
+                <div class="divider"></div>
+                <p style="font-size: 0.85rem; font-weight: 600; margin-bottom: 8px;">📊 当前结果</p>
+                <div id="mini-results-container"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        (function() {
+            'use strict';
+
+            // ==================== 全局状态 ====================
+            let peer = null;                    // 当前 Peer 实例
+            let hostConnection = null;          // 教师端：当前主机 Peer 对象（实际上就是 peer 自身）
+            let studentConnection = null;       // 学生端：到主机的 DataConnection
+            let pollData = null;                // { question, options: [] }
+            let votes = [];                     // 与 options 等长的数组
+            let isHost = false;                 // 当前页面是否为教师端
+            let hasVoted = false;               // 学生端是否已投票（本地标记）
+            let currentRoomCode = '';           // 当前房间码
+            let connectedStudents = new Set();  // 教师端：已连接的 peer id 集合（用于统计在线人数，可选）
+
+            // ==================== DOM 引用 ====================
+            const views = {
+                entry: document.getElementById('view-entry'),
+                teacherCreate: document.getElementById('view-teacher-create'),
+                teacherConsole: document.getElementById('view-teacher-console'),
+                studentVote: document.getElementById('view-student-vote')
+            };
+
+            // 入口页
+            const btnTeacherEntry = document.getElementById('btn-teacher-entry');
+            const btnStudentEntry = document.getElementById('btn-student-entry');
+            const studentJoinSection = document.getElementById('student-join-section');
+            const inputRoomCode = document.getElementById('input-room-code');
+            const btnStudentJoin = document.getElementById('btn-student-join');
+
+            // 教师创建页
+            const inputQuestion = document.getElementById('input-question');
+            const optionsContainer = document.getElementById('options-container');
+            const btnAddOption = document.getElementById('btn-add-option');
+            const btnCreatePoll = document.getElementById('btn-create-poll');
+            const createStatus = document.getElementById('create-status');
+
+            // 教师控制台
+            const hostConnectionBadge = document.getElementById('host-connection-badge');
+            const consoleQuestion = document.getElementById('console-question');
+            const qrContainer = document.getElementById('qr-container');
+            const displayRoomCode = document.getElementById('display-room-code');
+            const resultsContainer = document.getElementById('results-container');
+            const totalVotesEl = document.getElementById('total-votes');
+            const btnClosePoll = document.getElementById('btn-close-poll');
+
+            // 学生投票页
+            const studentRoomBadge = document.getElementById('student-room-badge');
+            const studentConnectionStatus = document.getElementById('student-connection-status');
+            const studentQuestion = document.getElementById('student-question');
+            const studentOptionsContainer = document.getElementById('student-options-container');
+            const studentStatus = document.getElementById('student-status');
+            const studentResultsMini = document.getElementById('student-results-mini');
+            const miniResultsContainer = document.getElementById('mini-results-container');
+
+            // ==================== 视图切换 ====================
+            function showView(viewName) {
+                Object.keys(views).forEach(function(key) {
+                    views[key].classList.add('hidden');
+                });
+                if (views[viewName]) {
+                    views[viewName].classList.remove('hidden');
+                }
+            }
+
+            // ==================== 工具函数 ====================
+
+            // 生成 6 位房间码（大写字母 + 数字，排除易混淆字符）
+            function generateRoomCode() {
+                var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                var code = '';
+                for (var i = 0; i < 6; i++) {
+                    code += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                return code;
+            }
+
+            // 生成 PeerJS 主机 ID（加前缀避免与其他应用冲突）
+            function roomCodeToPeerId(code) {
+                return 'classvote-' + code.toLowerCase();
+            }
+
+            // 显示状态消息
+            function showStatus(el, type, msg) {
+                if (!el) return;
+                el.classList.remove('hidden', 'status-info', 'status-error', 'status-success');
+                el.classList.add('status-' + type);
+                el.textContent = msg;
+            }
+
+            function hideStatus(el) {
+                if (el) el.classList.add('hidden');
+            }
+
+            // 安全设置文本
+            function setText(el, text) {
+                if (el) el.textContent = text;
+            }
+
+            // 获取当前页面的基础 URL（用于生成投票链接）
+            function getBaseUrl() {
+                // 使用 location.href 但去除 hash 和 search，保留路径
+                var base = window.location.href.split('#')[0].split('?')[0];
+                // 如果路径以 /index.html 结尾，可以保留；GitHub Pages 会自动处理
+                return base;
+            }
+
+            // 生成学生投票链接
+            function getStudentUrl(roomCode) {
+                return getBaseUrl() + '#room=' + roomCode;
+            }
+
+            // ==================== QR 码渲染 ====================
+            function renderQRCode(text) {
+                // 使用 qrcode-generator 生成 SVG
+                // typeNumber: 0 表示自动选择；errorCorrectionLevel: 'M' 适合一般环境
+                try {
+                    var qr = qrcode(0, 'M');
+                    qr.addData(text);
+                    qr.make();
+
+                    // 生成 SVG 字符串
+                    var svg = qr.createSvgTag({
+                        scalable: true,
+                        margin: 2,          // 内置 margin，但外面还有 padding
+                        size: 256
+                    });
+
+                    qrContainer.innerHTML = svg;
+                } catch (e) {
+                    console.error('QR 生成失败:', e);
+                    qrContainer.innerHTML = '<p style="color:var(--danger);font-size:0.8rem;text-align:center;">二维码生成失败，请手动复制链接</p>';
+                }
+            }
+
+            // ==================== 教师端逻辑 ====================
+
+            // 重置创建表单
+            function resetCreateForm() {
+                inputQuestion.value = '';
+                optionsContainer.innerHTML = '';
+                addOptionRow();
+                addOptionRow();
+                hideStatus(createStatus);
+                btnCreatePoll.disabled = false;
+                btnCreatePoll.textContent = '生成投票 & 二维码';
+            }
+
+            // 添加选项输入行
+            function addOptionRow(value) {
+                var row = document.createElement('div');
+                row.className = 'option-row';
+
+                var input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'option-input';
+                input.placeholder = '选项 ' + (optionsContainer.children.length + 1);
+                input.maxLength = 40;
+                if (value) input.value = value;
+
+                var btn = document.createElement('button');
+                btn.className = 'remove-option';
+                btn.textContent = '✕';
+                btn.title = '删除';
+                btn.onclick = function() { removeOption(btn); };
+
+                row.appendChild(input);
+                row.appendChild(btn);
+                optionsContainer.appendChild(row);
+            }
+
+            // 删除选项行（全局函数，供 HTML 内联 onclick 调用）
+            window.removeOption = function(btn) {
+                var row = btn.parentNode;
+                // 确保至少保留 2 个选项
+                if (optionsContainer.children.length <= 2) {
+                    alert('至少需要 2 个选项');
+                    return;
+                }
+                row.remove();
+                // 更新剩余选项的 placeholder
+                var inputs = optionsContainer.querySelectorAll('.option-input');
+                inputs.forEach(function(inp, idx) {
+                    if (!inp.value) {
+                        inp.placeholder = '选项 ' + (idx + 1);
+                    }
+                });
+            };
+
+            // 收集并校验表单数据
+            function collectPollData() {
+                var question = inputQuestion.value.trim();
+                if (!question) {
+                    showStatus(createStatus, 'error', '请输入投票问题');
+                    inputQuestion.focus();
+                    return null;
+                }
+
+                var optionInputs = optionsContainer.querySelectorAll('.option-input');
+                var options = [];
+                for (var i = 0; i < optionInputs.length; i++) {
+                    var val = optionInputs[i].value.trim();
+                    if (!val) {
+                        showStatus(createStatus, 'error', '选项 ' + (i + 1) + ' 不能为空');
+                        optionInputs[i].focus();
+                        return null;
+                    }
+                    options.push(val);
+                }
+
+                if (options.length < 2) {
+                    showStatus(createStatus, 'error', '至少需要 2 个选项');
+                    return null;
+                }
+
+                if (options.length > 6) {
+                    showStatus(createStatus, 'error', '最多 6 个选项');
+                    return null;
+                }
+
+                return { question: question, options: options };
+            }
+
+            // 教师端：创建 Peer 主机并生成投票
+            function createPollAsHost(data) {
+                btnCreatePoll.disabled = true;
+                btnCreatePoll.innerHTML = '<span class="spinner"></span> 正在创建…';
+                hideStatus(createStatus);
+
+                pollData = data;
+                votes = new Array(pollData.options.length).fill(0);
+                isHost = true;
+
+                // 生成唯一房间码（最多尝试 10 次）
+                var attempts = 0;
+                var maxAttempts = 10;
+
+                function tryCreatePeer() {
+                    if (attempts >= maxAttempts) {
+                        showStatus(createStatus, 'error', '无法创建房间，请稍后重试');
+                        btnCreatePoll.disabled = false;
+                        btnCreatePoll.textContent = '生成投票 & 二维码';
+                        return;
+                    }
+                    attempts++;
+
+                    var code = generateRoomCode();
+                    var peerId = roomCodeToPeerId(code);
+                    currentRoomCode = code;
+
+                    // 如果已有 peer，先销毁
+                    if (peer) {
+                        try { peer.destroy(); } catch (e) {}
+                        peer = null;
+                    }
+
+                    peer = new Peer(peerId);
+
+                    // 设置超时
+                    var timeout = setTimeout(function() {
+                        if (peer && !peer.destroyed) {
+                            try { peer.destroy(); } catch (e) {}
+                        }
+                        peer = null;
+                        tryCreatePeer(); // 重试
+                    }, 6000);
+
+                    peer.on('open', function(id) {
+                        clearTimeout(timeout);
+                        console.log('教师端 Peer 已就绪，ID:', id);
+
+                        // 成功创建房间
+                        hostConnectionBadge.textContent = '已就绪';
+                        hostConnectionBadge.style.background = '#ecfdf5';
+                        hostConnectionBadge.style.color = '#065f46';
+
+                        // 切换到控制台
+                        showView('teacherConsole');
+                        setText(consoleQuestion, pollData.question);
+                        displayRoomCode.textContent = currentRoomCode;
+
+                        // 渲染初始结果
+                        renderResults();
+
+                        // 生成 QR 码
+                        var studentUrl = getStudentUrl(currentRoomCode);
+                        renderQRCode(studentUrl);
+                        console.log('学生投票链接:', studentUrl);
+
+                        // 监听学生连接
+                        setupHostConnectionHandlers();
+
+                        // 重置创建按钮状态（以便下次使用，但视图已切换）
+                        btnCreatePoll.disabled = false;
+                        btnCreatePoll.textContent = '生成投票 & 二维码';
+                    });
+
+                    peer.on('error', function(err) {
+                        clearTimeout(timeout);
+                        console.warn('Peer 创建失败:', err.type, err.message);
+
+                        // 如果是 ID 被占用，自动重试
+                        if (err.type === 'unavailable-id') {
+                            if (peer) { try { peer.destroy(); } catch (e) {} }
+                            peer = null;
+                            tryCreatePeer();
+                        } else {
+                            // 其他错误
+                            showStatus(createStatus, 'error', '连接服务器失败：' + (err.message || err.type) + '。请检查网络后重试。');
+                            btnCreatePoll.disabled = false;
+                            btnCreatePoll.textContent = '生成投票 & 二维码';
+                            if (peer) { try { peer.destroy(); } catch (e) {} }
+                            peer = null;
+                        }
+                    });
+
+                    peer.on('disconnected', function() {
+                        // 尝试重连
+                        if (peer && !peer.destroyed) {
+                            peer.reconnect();
+                        }
+                    });
+                }
+
+                tryCreatePeer();
+            }
+
+            // 教师端：设置主机连接处理
+            function setupHostConnectionHandlers() {
+                if (!peer) return;
+
+                peer.on('connection', function(conn) {
+                    console.log('学生已连接:', conn.peer);
+                    connectedStudents.add(conn.peer);
+
+                    // 向新连接的学生发送初始数据
+                    conn.on('open', function() {
+                        conn.send({
+                            type: 'init',
+                            question: pollData.question,
+                            options: pollData.options,
+                            votes: votes.slice() // 当前票数快照
+                        });
+                    });
+
+                    // 接收学生消息
+                    conn.on('data', function(data) {
+                        handleStudentMessage(conn, data);
+                    });
+
+                    conn.on('close', function() {
+                        connectedStudents.delete(conn.peer);
+                    });
+
+                    conn.on('error', function(err) {
+                        console.warn('连接错误:', conn.peer, err);
+                    });
+                });
+            }
+
+            // 教师端：处理学生发来的消息
+            function handleStudentMessage(conn, data) {
+                if (!data || typeof data !== 'object') return;
+
+                if (data.type === 'vote') {
+                    var idx = data.optionIndex;
+                    // 校验
+                    if (typeof idx !== 'number' || idx < 0 || idx >= votes.length) {
+                        return;
+                    }
+
+                    // 防止同一连接重复投票（简单限制）
+                    if (conn._hasVoted) {
+                        conn.send({ type: 'error', message: '你已经投过票了' });
+                        return;
+                    }
+
+                    // 记录投票
+                    votes[idx]++;
+                    conn._hasVoted = true;
+
+                    // 确认
+                    conn.send({ type: 'vote-ack', optionIndex: idx });
+
+                    // 广播最新结果给所有已连接的学生（可选，让他们也能看到实时结果）
+                    broadcastToStudents({
+                        type: 'update',
+                        votes: votes.slice()
+                    });
+
+                    // 更新教师端 UI
+                    renderResults();
+                }
+            }
+
+            // 教师端：广播消息给所有学生
+            function broadcastToStudents(msg) {
+                if (!peer) return;
+                // PeerJS 主机没有直接遍历所有连接的 API，需要自己维护
+                // 但我们可以通过 peer.connections 来获取
+                Object.keys(peer.connections).forEach(function(peerId) {
+                    var conns = peer.connections[peerId];
+                    if (Array.isArray(conns)) {
+                        conns.forEach(function(conn) {
+                            if (conn.open) {
+                                try { conn.send(msg); } catch (e) {}
+                            }
+                        });
+                    }
+                });
+            }
+
+            // 教师端：渲染结果
+            function renderResults() {
+                if (!pollData) return;
+
+                var total = votes.reduce(function(a, b) { return a + b; }, 0);
+                setText(totalVotesEl, total);
+
+                var html = '';
+                for (var i = 0; i < pollData.options.length; i++) {
+                    var count = votes[i] || 0;
+                    var pct = total > 0 ? Math.round((count / total) * 100) : 0;
+
+                    html += '<div class="result-item">';
+                    html += '<div class="result-header">';
+                    html += '<span>' + escapeHtml(pollData.options[i]) + '</span>';
+                    html += '<span class="result-count">' + count + ' 票 · ' + pct + '%</span>';
+                    html += '</div>';
+                    html += '<div class="progress-track">';
+                    html += '<div class="progress-fill" style="width: ' + pct + '%;"></div>';
+                    html += '</div>';
+                    html += '</div>';
+                }
+                resultsContainer.innerHTML = html;
+            }
+
+            // HTML 转义
+            function escapeHtml(str) {
+                return String(str).replace(/[&<>"']/g, function(m) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+                });
+            }
+
+            // ==================== 学生端逻辑 ====================
+
+            // 学生端：通过房间码加入
+            function joinAsStudent(roomCode) {
+                roomCode = roomCode.toUpperCase().trim();
+                if (!roomCode || roomCode.length !== 6) {
+                    alert('请输入 6 位房间码');
+                    return;
+                }
+
+                currentRoomCode = roomCode;
+                isHost = false;
+                hasVoted = false;
+
+                // 切换到学生视图
+                showView('studentVote');
+                setText(studentRoomBadge, '房间 ' + roomCode);
+                setText(studentQuestion, '正在连接教师端…');
+                studentConnectionStatus.textContent = '连接中…';
+                studentOptionsContainer.innerHTML = '';
+                hideStatus(studentStatus);
+                studentResultsMini.classList.add('hidden');
+
+                // 创建 Peer 并连接主机
+                if (peer) {
+                    try { peer.destroy(); } catch (e) {}
+                    peer = null;
+                }
+
+                peer = new Peer(); // 学生端不指定 ID，由服务器分配
+
+                var connectTimeout = setTimeout(function() {
+                    if (studentConnection && !studentConnection.open) {
+                        showStatus(studentStatus, 'error', '连接超时。请确认教师页面已打开，且网络正常。');
+                        studentConnectionStatus.textContent = '连接超时';
+                    }
+                }, 10000);
+
+                peer.on('open', function() {
+                    console.log('学生端 Peer 已就绪，尝试连接主机…');
+                    var hostPeerId = roomCodeToPeerId(roomCode);
+                    studentConnection = peer.connect(hostPeerId, {
+                        reliable: true
+                    });
+
+                    studentConnection.on('open', function() {
+                        clearTimeout(connectTimeout);
+                        console.log('已连接到教师主机');
+                        studentConnectionStatus.textContent = '已连接';
+                        studentConnectionStatus.style.color = 'var(--success)';
+                        hideStatus(studentStatus);
+                    });
+
+                    studentConnection.on('data', function(data) {
+                        handleHostMessage(data);
+                    });
+
+                    studentConnection.on('close', function() {
+                        studentConnectionStatus.textContent = '连接已断开';
+                        studentConnectionStatus.style.color = 'var(--danger)';
+                        showStatus(studentStatus, 'error', '与教师端的连接已断开。请确认教师页面仍然打开。');
+                    });
+
+                    studentConnection.on('error', function(err) {
+                        clearTimeout(connectTimeout);
+                        console.warn('连接错误:', err);
+                        studentConnectionStatus.textContent = '连接失败';
+                        showStatus(studentStatus, 'error', '无法连接到教师端。请确认房间码正确，且教师页面保持打开。');
+                    });
+                });
+
+                peer.on('error', function(err) {
+                    clearTimeout(connectTimeout);
+                    console.warn('Peer 错误:', err.type, err.message);
+                    if (err.type === 'peer-unavailable') {
+                        showStatus(studentStatus, 'error', '找不到该房间。请确认房间码正确，且教师端页面已打开。');
+                        studentConnectionStatus.textContent = '房间不存在';
+                    } else {
+                        showStatus(studentStatus, 'error', '网络连接失败：' + (err.message || err.type));
+                    }
+                });
+            }
+
+            // 学生端：处理来自主机端的消息
+            function handleHostMessage(data) {
+                if (!data || typeof data !== 'object') return;
+
+                switch (data.type) {
+                    case 'init':
+                        // 收到初始投票数据
+                        pollData = {
+                            question: data.question,
+                            options: data.options || []
+                        };
+                        votes = data.votes || new Array(pollData.options.length).fill(0);
+
+                        setText(studentQuestion, pollData.question);
+                        renderStudentOptions();
+
+                        // 如果已经投过票（比如刷新后重连），显示状态
+                        if (hasVoted) {
+                            showStatus(studentStatus, 'info', '你已经投过票了。');
+                        }
+                        break;
+
+                    case 'vote-ack':
+                        // 投票确认
+                        hasVoted = true;
+                        studentConnectionStatus.textContent = '投票成功';
+                        studentConnectionStatus.style.color = 'var(--success)';
+                        showStatus(studentStatus, 'success', '✅ 投票成功！感谢参与。');
+                        disableStudentOptions();
+                        break;
+
+                    case 'error':
+                        showStatus(studentStatus, 'error', data.message || '发生错误');
+                        break;
+
+                    case 'update':
+                        // 主机广播的最新结果
+                        if (data.votes && Array.isArray(data.votes)) {
+                            votes = data.votes;
+                            if (!hasVoted) {
+                                // 未投票的学生可以选择是否显示结果，这里只在投票后显示
+                            } else {
+                                renderMiniResults();
+                            }
+                        }
+                        break;
+                }
+            }
+
+            // 学生端：渲染选项按钮
+            function renderStudentOptions() {
+                if (!pollData) return;
+
+                // 检查本地是否已投票（简单防重复）
+                var votedFlag = localStorage.getItem('voted_' + currentRoomCode);
+                if (votedFlag) {
+                    hasVoted = true;
+                }
+
+                var html = '';
+                for (var i = 0; i < pollData.options.length; i++) {
+                    html += '<button class="vote-option-btn" data-index="' + i + '"' + (hasVoted ? ' disabled' : '') + '>';
+                    html += escapeHtml(pollData.options[i]);
+                    html += '</button>';
+                }
+                studentOptionsContainer.innerHTML = html;
+
+                // 绑定点击事件
+                var btns = studentOptionsContainer.querySelectorAll('.vote-option-btn');
+                btns.forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        if (hasVoted) return;
+                        var idx = parseInt(this.getAttribute('data-index'), 10);
+                        castVote(idx);
+                    });
+                });
+
+                if (hasVoted) {
+                    disableStudentOptions();
+                    showStatus(studentStatus, 'info', '你已经投过票了。');
+                    renderMiniResults();
+                }
+            }
+
+            // 学生端：投票
+            function castVote(optionIndex) {
+                if (hasVoted) return;
+                if (!studentConnection || !studentConnection.open) {
+                    showStatus(studentStatus, 'error', '连接尚未就绪，请稍后重试。');
+                    return;
+                }
+
+                // 发送投票
+                studentConnection.send({
+                    type: 'vote',
+                    optionIndex: optionIndex
+                });
+
+                // 本地标记（防止刷新后重复投票）
+                localStorage.setItem('voted_' + currentRoomCode, '1');
+                hasVoted = true;
+
+                // UI 反馈
+                var btns = studentOptionsContainer.querySelectorAll('.vote-option-btn');
+                btns.forEach(function(btn, idx) {
+                    btn.disabled = true;
+                    if (idx === optionIndex) {
+                        btn.classList.add('selected');
+                    }
+                });
+
+                showStatus(studentStatus, 'info', '正在提交…');
+            }
+
+            // 禁用学生选项
+            function disableStudentOptions() {
+                var btns = studentOptionsContainer.querySelectorAll('.vote-option-btn');
+                btns.forEach(function(btn) {
+                    btn.disabled = true;
+                });
+            }
+
+            // 学生端：渲染迷你结果（投票后显示）
+            function renderMiniResults() {
+                if (!pollData || !votes) return;
+
+                var total = votes.reduce(function(a, b) { return a + b; }, 0);
+                var html = '';
+                for (var i = 0; i < pollData.options.length; i++) {
+                    var count = votes[i] || 0;
+                    var pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                    html += '<div class="result-item">';
+                    html += '<div class="result-header">';
+                    html += '<span>' + escapeHtml(pollData.options[i]) + '</span>';
+                    html += '<span class="result-count">' + count + ' 票</span>';
+                    html += '</div>';
+                    html += '<div class="progress-track"><div class="progress-fill" style="width: ' + pct + '%;"></div></div>';
+                    html += '</div>';
+                }
+                miniResultsContainer.innerHTML = html;
+                studentResultsMini.classList.remove('hidden');
+            }
+
+            // ==================== 页面初始化与路由 ====================
+
+            // 重置教师状态
+            function resetTeacherState() {
+                if (peer) {
+                    try { peer.destroy(); } catch (e) {}
+                    peer = null;
+                }
+                isHost = false;
+                pollData = null;
+                votes = [];
+                currentRoomCode = '';
+                connectedStudents.clear();
+                hostConnectionBadge.textContent = '等待连接';
+                hostConnectionBadge.style.background = '';
+                hostConnectionBadge.style.color = '';
+            }
+
+            // 页面加载时解析 URL hash
+            function handleInitialRoute() {
+                var hash = window.location.hash;
+                if (hash.indexOf('#room=') === 0) {
+                    var code = hash.substring(6).toUpperCase().trim();
+                    if (code.length === 6) {
+                        // 自动以学生身份加入
+                        showView('studentVote');
+                        joinAsStudent(code);
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            // 清理并重置
+            function resetAll() {
+                if (peer) {
+                    try { peer.destroy(); } catch (e) {}
+                    peer = null;
+                }
+                if (studentConnection) {
+                    try { studentConnection.close(); } catch (e) {}
+                    studentConnection = null;
+                }
+                pollData = null;
+                votes = [];
+                hasVoted = false;
+                isHost = false;
+                currentRoomCode = '';
+                connectedStudents.clear();
+                window.location.hash = '';
+            }
+
+            // ==================== 事件绑定 ====================
+
+            // 入口页：教师
+            btnTeacherEntry.addEventListener('click', function() {
+                resetAll();
+                resetCreateForm();
+                showView('teacherCreate');
+            });
+
+            // 入口页：学生（显示输入框）
+            btnStudentEntry.addEventListener('click', function() {
+                studentJoinSection.classList.toggle('hidden');
+                if (!studentJoinSection.classList.contains('hidden')) {
+                    inputRoomCode.focus();
+                }
+            });
+
+            // 学生加入按钮
+            btnStudentJoin.addEventListener('click', function() {
+                var code = inputRoomCode.value.trim().toUpperCase();
+                if (code.length !== 6) {
+                    alert('请输入 6 位房间码');
+                    return;
+                }
+                window.location.hash = 'room=' + code;
+                joinAsStudent(code);
+            });
+
+            // 房间码输入框回车
+            inputRoomCode.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    btnStudentJoin.click();
+                }
+            });
+
+            // 创建页：添加选项
+            btnAddOption.addEventListener('click', function() {
+                if (optionsContainer.children.length >= 6) {
+                    alert('最多 6 个选项');
+                    return;
+                }
+                addOptionRow();
+            });
+
+            // 创建页：提交
+            btnCreatePoll.addEventListener('click', function() {
+                var data = collectPollData();
+                if (!data) return;
+                createPollAsHost(data);
+            });
+
+            // 教师控制台：关闭投票
+            btnClosePoll.addEventListener('click', function() {
+                if (confirm('确定要结束投票吗？所有学生连接将被断开。')) {
+                    resetAll();
+                    resetCreateForm();
+                    showView('entry');
+                    studentJoinSection.classList.add('hidden');
+                }
+            });
+
+            // 监听 hash 变化（例如用户手动修改 URL）
+            window.addEventListener('hashchange', function() {
+                var hash = window.location.hash;
+                if (hash.indexOf('#room=') === 0) {
+                    var code = hash.substring(6).toUpperCase().trim();
+                    if (code.length === 6) {
+                        joinAsStudent(code);
+                    }
+                } else {
+                    // hash 被清除，回到入口页
+                    if (!isHost) {
+                        showView('entry');
+                    }
+                }
+            });
+
+            // 初始化
+            (function init() {
+                // 初始化时添加两个选项行（如果为空）
+                if (optionsContainer.children.length === 0) {
+                    addOptionRow();
+                    addOptionRow();
+                }
+
+                // 检查 URL 是否直接包含房间码
+                if (!handleInitialRoute()) {
+                    showView('entry');
+                }
+            })();
+
+        })();
+    </script>
+</body>
+</html>
