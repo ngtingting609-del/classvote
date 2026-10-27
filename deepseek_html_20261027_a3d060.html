@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <title>Classroom Vote • Anonymous & Real‑time</title>
+  <!-- PeerJS (P2P signaling) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- QRCode.js (canvas/table based QR generation) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    /* ----- RESET & GLOBAL ----- */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #f5f7fb;
+      color: #1e293b;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    /* ----- CARDS ----- */
+    .card {
+      background: #ffffff;
+      border-radius: 24px;
+      padding: 24px 20px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.02);
+      margin-bottom: 20px;
+      transition: box-shadow 0.2s ease;
+    }
+
+    .card:hover {
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06);
+    }
+
+    /* ----- TYPOGRAPHY ----- */
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 0.95rem;
+      color: #64748b;
+      margin-bottom: 20px;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #334155;
+      margin-bottom: 6px;
+    }
+
+    /* ----- INPUTS & BUTTONS ----- */
+    input[type="text"],
+    textarea {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 1rem;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 16px;
+      background: #f8fafc;
+      outline: none;
+      transition: border 0.15s, box-shadow 0.15s;
+      font-family: inherit;
+    }
+
+    input[type="text"]:focus,
+    textarea:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+      background: #ffffff;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 24px;
+      font-size: 1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 16px;
+      cursor: pointer;
+      transition: transform 0.1s, filter 0.15s, box-shadow 0.15s;
+      background: #3b82f6;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+      width: 100%;
+    }
+
+    button:hover {
+      filter: brightness(1.05);
+      box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35);
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    button:disabled {
+      background: #cbd5e1;
+      box-shadow: none;
+      cursor: not-allowed;
+      filter: none;
+      transform: none;
+    }
+
+    button.secondary {
+      background: #ffffff;
+      color: #1e293b;
+      border: 1.5px solid #e2e8f0;
+      box-shadow: none;
+    }
+
+    button.secondary:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+
+    /* ----- OPTION ROWS ----- */
+    .option-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+
+    .option-row input {
+      flex: 1;
+    }
+
+    .option-row .remove-btn {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: 12px;
+      background: #f1f5f9;
+      color: #64748b;
+      border: none;
+      box-shadow: none;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .option-row .remove-btn:hover {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    .option-row .remove-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    /* ----- QR CODE ----- */
+    #qrcode-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+      background: #f8fafc;
+      border-radius: 20px;
+      margin: 16px 0;
+      min-height: 220px;
+    }
+
+    #qrcode-container canvas,
+    #qrcode-container img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 12px;
+    }
+
+    .join-url {
+      font-size: 0.8rem;
+      word-break: break-all;
+      color: #64748b;
+      background: #f1f5f9;
+      padding: 10px 14px;
+      border-radius: 14px;
+      margin-bottom: 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* ----- RESULTS ----- */
+    .result-item {
+      margin-bottom: 14px;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .result-bar-bg {
+      height: 12px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .result-bar-fill {
+      height: 100%;
+      background: #3b82f6;
+      border-radius: 999px;
+      transition: width 0.3s ease;
+      min-width: 0%;
+    }
+
+    .total-votes {
+      font-size: 0.9rem;
+      color: #64748b;
+      text-align: right;
+      margin-top: 8px;
+    }
+
+    /* ----- UTILITY ----- */
+    .hidden {
+      display: none !important;
+    }
+
+    .mt-12 {
+      margin-top: 12px;
+    }
+
+    .mt-16 {
+      margin-top: 16px;
+    }
+
+    .flex {
+      display: flex;
+      gap: 10px;
+    }
+
+    .flex-1 {
+      flex: 1;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .status-dot.connected {
+      background: #22c55e;
+    }
+
+    .status-dot.waiting {
+      background: #f59e0b;
+    }
+
+    /* ----- RESPONSIVE ----- */
+    @media (max-width: 480px) {
+      body {
+        padding: 10px;
+      }
+      .card {
+        padding: 20px 16px;
+        border-radius: 20px;
+      }
+      h1 {
+        font-size: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- ==================== TEACHER VIEW ==================== -->
+    <div id="teacher-view">
+      <div class="card">
+        <h1>📋 Create a Poll</h1>
+        <p class="subtitle">Anonymous · No login · Real‑time</p>
+
+        <label for="question">Question</label>
+        <input type="text" id="question" placeholder="e.g. What is the capital of France?" value="What is the capital of France?" />
+
+        <label class="mt-12">Options</label>
+        <div id="options-container">
+          <div class="option-row">
+            <input type="text" class="option-input" placeholder="Option 1" value="Paris" />
+            <button class="remove-btn" disabled>✕</button>
+          </div>
+          <div class="option-row">
+            <input type="text" class="option-input" placeholder="Option 2" value="London" />
+            <button class="remove-btn" disabled>✕</button>
+          </div>
+          <div class="option-row">
+            <input type="text" class="option-input" placeholder="Option 3" value="Berlin" />
+            <button class="remove-btn" disabled>✕</button>
+          </div>
+        </div>
+
+        <button class="secondary mt-12" id="add-option-btn" style="width:auto; padding:10px 18px;">+ Add option</button>
+
+        <button id="create-poll-btn" class="mt-16">Create Poll & Show QR</button>
+      </div>
+
+      <!-- QR + Join Link (hidden initially) -->
+      <div class="card hidden" id="qr-card">
+        <h2>📱 Scan to vote</h2>
+        <p class="subtitle">Students scan this QR code to join the poll anonymously.</p>
+        <div id="qrcode-container"></div>
+        <div class="join-url" id="join-url-display"></div>
+        <button class="secondary" id="copy-link-btn">📋 Copy join link</button>
+      </div>
+
+      <!-- Results (hidden initially) -->
+      <div class="card hidden" id="results-card">
+        <div class="flex" style="justify-content: space-between; align-items: center;">
+          <h2>📊 Live Results</h2>
+          <span id="peer-status" style="font-size:0.85rem; color:#64748b;">
+            <span class="status-dot waiting"></span> Waiting for students…
+          </span>
+        </div>
+        <div id="results-container" class="mt-12"></div>
+        <div class="total-votes" id="total-votes">Total votes: 0</div>
+      </div>
+    </div>
+
+    <!-- ==================== STUDENT VIEW ==================== -->
+    <div id="student-view" class="hidden">
+      <div class="card">
+        <h1>🗳️ Vote</h1>
+        <p class="subtitle" id="student-subtitle">Your vote is anonymous.</p>
+        <h2 id="student-question" class="mt-12"></h2>
+        <div id="student-options" class="mt-12"></div>
+        <button id="submit-vote-btn" class="mt-16">Submit Vote</button>
+        <p id="vote-feedback" class="text-center mt-12" style="font-size:0.9rem;"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      // ---------- GLOBAL STATE ----------
+      let peer = null;
+      let connections = [];          // host: active DataConnections
+      let currentPoll = null;        // { question, options }
+      let votes = {};                // host: { optionIndex: count }
+      let studentConnection = null;  // student: DataConnection to host
+      let hasVoted = false;          // simple client-side guard
+
+      const appEl = document.getElementById('app');
+      const teacherView = document.getElementById('teacher-view');
+      const studentView = document.getElementById('student-view');
+
+      // ---------- DETECT ROLE ----------
+      const hash = window.location.hash;
+      if (hash.startsWith('#join')) {
+        // Student mode
+        teacherView.classList.add('hidden');
+        studentView.classList.remove('hidden');
+        initStudentMode();
+      } else {
+        // Teacher mode (default)
+        initTeacherMode();
+      }
+
+      // ============================================================
+      //  TEACHER MODE
+      // ============================================================
+      function initTeacherMode() {
+        const optionsContainer = document.getElementById('options-container');
+        const addOptionBtn = document.getElementById('add-option-btn');
+        const createPollBtn = document.getElementById('create-poll-btn');
+        const qrCard = document.getElementById('qr-card');
+        const qrcodeContainer = document.getElementById('qrcode-container');
+        const joinUrlDisplay = document.getElementById('join-url-display');
+        const resultsCard = document.getElementById('results-card');
+        const resultsContainer = document.getElementById('results-container');
+        const totalVotesEl = document.getElementById('total-votes');
+        const peerStatusEl = document.getElementById('peer-status');
+        const copyLinkBtn = document.getElementById('copy-link-btn');
+
+        let qrInstance = null;
+
+        // --- Dynamic option fields ---
+        addOptionBtn.addEventListener('click', () => {
+          const row = document.createElement('div');
+          row.className = 'option-row';
+          row.innerHTML = `
+            <input type="text" class="option-input" placeholder="Option ${optionsContainer.children.length + 1}" />
+            <button class="remove-btn">✕</button>
+          `;
+          optionsContainer.appendChild(row);
+          row.querySelector('.remove-btn').addEventListener('click', function() {
+            if (optionsContainer.children.length > 2) {
+              row.remove();
+              updateRemoveButtons();
+            }
+          });
+          updateRemoveButtons();
+        });
+
+        function updateRemoveButtons() {
+          const rows = optionsContainer.querySelectorAll('.option-row');
+          rows.forEach((row, i) => {
+            const btn = row.querySelector('.remove-btn');
+            if (btn) btn.disabled = rows.length <= 2;
+          });
+        }
+        updateRemoveButtons();
+
+        // Attach listeners to existing remove buttons
+        optionsContainer.querySelectorAll('.remove-btn').forEach(btn => {
+          btn.addEventListener('click', function() {
+            if (optionsContainer.children.length > 2) {
+              btn.closest('.option-row').remove();
+              updateRemoveButtons();
+            }
+          });
+        });
+
+        // --- Create poll ---
+        createPollBtn.addEventListener('click', () => {
+          const question = document.getElementById('question').value.trim();
+          const optionInputs = optionsContainer.querySelectorAll('.option-input');
+          const options = Array.from(optionInputs)
+            .map(inp => inp.value.trim())
+            .filter(v => v.length > 0);
+
+          if (!question) {
+            alert('Please enter a question.');
+            return;
+          }
+          if (options.length < 2) {
+            alert('Please provide at least 2 options.');
+            return;
+          }
+
+          currentPoll = { question, options };
+          votes = {};
+          options.forEach((_, i) => votes[i] = 0);
+
+          // Reset UI
+          if (qrInstance) {
+            qrcodeContainer.innerHTML = '';
+            qrInstance = null;
+          }
+          resultsContainer.innerHTML = '';
+          totalVotesEl.textContent = 'Total votes: 0';
+          peerStatusEl.innerHTML = '<span class="status-dot waiting"></span> Waiting for students…';
+
+          // Initialize PeerJS (host)
+          if (peer) {
+            peer.destroy();
+          }
+          peer = new Peer(undefined, {
+            // Uses the free PeerJS Cloud signaling server by default.
+            // For production stability, consider self-hosting a PeerServer.
+          });
+
+          peer.on('open', (id) => {
+            console.log('Host Peer ID:', id);
+
+            // Build join URL
+            const payload = {
+              question: currentPoll.question,
+              options: currentPoll.options
+            };
+            const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+            // Use the current page URL, strip any existing hash/query, and append join params
+            const baseUrl = window.location.origin + window.location.pathname;
+            const joinUrl = `${baseUrl}#join?host=${id}&data=${encodeURIComponent(encoded)}`;
+
+            // Show QR
+            qrCard.classList.remove('hidden');
+            resultsCard.classList.remove('hidden');
+            qrcodeContainer.innerHTML = '';
+            qrInstance = new QRCode(qrcodeContainer, {
+              text: joinUrl,
+              width: 220,
+              height: 220,
+              colorDark: '#1e293b',
+              colorLight: '#ffffff',
+              correctLevel: QRCode.CorrectLevel.H
+            });
+
+            joinUrlDisplay.textContent = joinUrl;
+
+            // Copy button
+            copyLinkBtn.onclick = () => {
+              navigator.clipboard.writeText(joinUrl).then(() => {
+                copyLinkBtn.textContent = '✅ Copied!';
+                setTimeout(() => { copyLinkBtn.textContent = '📋 Copy join link'; }, 2000);
+              }).catch(() => {
+                // Fallback
+                const ta = document.createElement('textarea');
+                ta.value = joinUrl;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                ta.remove();
+                copyLinkBtn.textContent = '✅ Copied!';
+                setTimeout(() => { copyLinkBtn.textContent = '📋 Copy join link'; }, 2000);
+              });
+            };
+
+            // Scroll to QR
+            qrCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+
+          peer.on('connection', (conn) => {
+            console.log('Student connected:', conn.peer);
+            connections.push(conn);
+
+            // Update status
+            peerStatusEl.innerHTML = '<span class="status-dot connected"></span> Connected • ' + connections.length + ' student(s)';
+
+            conn.on('data', (data) => {
+              if (data.type === 'vote' && typeof data.optionIndex === 'number') {
+                const idx = data.optionIndex;
+                if (votes[idx] !== undefined) {
+                  votes[idx]++;
+                  updateResultsUI();
+                }
+              }
+            });
+
+            conn.on('close', () => {
+              connections = connections.filter(c => c !== conn);
+              if (connections.length === 0) {
+                peerStatusEl.innerHTML = '<span class="status-dot waiting"></span> Waiting for students…';
+              } else {
+                peerStatusEl.innerHTML = '<span class="status-dot connected"></span> Connected • ' + connections.length + ' student(s)';
+              }
+            });
+
+            conn.on('error', (err) => {
+              console.warn('Connection error:', err);
+            });
+          });
+
+          peer.on('error', (err) => {
+            console.error('Peer error:', err);
+            alert('Network error: ' + err.message + '\n\nPlease check your internet connection and try again.');
+          });
+        });
+
+        function updateResultsUI() {
+          if (!currentPoll) return;
+          const total = Object.values(votes).reduce((a, b) => a + b, 0);
+          totalVotesEl.textContent = `Total votes: ${total}`;
+
+          resultsContainer.innerHTML = currentPoll.options.map((opt, i) => {
+            const count = votes[i] || 0;
+            const pct = total > 0 ? (count / total * 100) : 0;
+            return `
+              <div class="result-item">
+                <div class="result-header">
+                  <span>${escapeHtml(opt)}</span>
+                  <span>${count} (${pct.toFixed(0)}%)</span>
+                </div>
+                <div class="result-bar-bg">
+                  <div class="result-bar-fill" style="width:${pct}%"></div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        function escapeHtml(text) {
+          const div = document.createElement('div');
+          div.textContent = text;
+          return div.innerHTML;
+        }
+      }
+
+      // ============================================================
+      //  STUDENT MODE
+      // ============================================================
+      function initStudentMode() {
+        // Parse hash: #join?host=xxx&data=yyy
+        const hashContent = window.location.hash.slice(1); // remove #
+        const queryIndex = hashContent.indexOf('?');
+        if (queryIndex === -1) {
+          showStudentError('Invalid join link. Please scan the QR code again.');
+          return;
+        }
+        const params = new URLSearchParams(hashContent.slice(queryIndex));
+        const hostId = params.get('host');
+        const dataEncoded = params.get('data');
+
+        if (!hostId || !dataEncoded) {
+          showStudentError('Missing poll data. Please scan the QR code again.');
+          return;
+        }
+
+        let pollData;
+        try {
+          const decoded = decodeURIComponent(dataEncoded);
+          const json = decodeURIComponent(escape(atob(decoded)));
+          pollData = JSON.parse(json);
+          if (!pollData.question || !Array.isArray(pollData.options) || pollData.options.length < 2) {
+            throw new Error('Invalid poll data');
+          }
+        } catch (e) {
+          showStudentError('Could not read poll data. The link may be corrupted.');
+          return;
+        }
+
+        // Render student UI
+        document.getElementById('student-question').textContent = pollData.question;
+        document.getElementById('student-subtitle').textContent = 'Your vote is anonymous. Select one option.';
+
+        const optionsDiv = document.getElementById('student-options');
+        optionsDiv.innerHTML = pollData.options.map((opt, i) => `
+          <label style="display:flex; align-items:center; gap:12px; padding:12px 16px; background:#f8fafc; border-radius:16px; margin-bottom:8px; cursor:pointer; border:1.5px solid transparent; transition: border 0.15s;" 
+                 onclick="this.parentNode.querySelectorAll('label').forEach(l=>l.style.borderColor='transparent'); this.style.borderColor='#3b82f6';">
+            <input type="radio" name="student-option" value="${i}" style="width:18px; height:18px; accent-color:#3b82f6;" />
+            <span style="font-size:1rem;">${escapeHtml(opt)}</span>
+          </label>
+        `).join('');
+
+        // Connect to host via PeerJS
+        peer = new Peer(undefined); // Student gets a random ID
+
+        peer.on('open', (studentId) => {
+          console.log('Student Peer ID:', studentId);
+          const conn = peer.connect(hostId, { reliable: true });
+          studentConnection = conn;
+
+          conn.on('open', () => {
+            console.log('Connected to host');
+            document.getElementById('student-subtitle').textContent = 'Connected. Select an option and submit.';
+          });
+
+          conn.on('error', (err) => {
+            console.error('Connection error:', err);
+            showStudentError('Could not connect to the poll host. Please ask your teacher to refresh and try again.');
+          });
+        });
+
+        peer.on('error', (err) => {
+          console.error('Peer error:', err);
+          showStudentError('Network error: ' + err.message);
+        });
+
+        // Submit vote
+        document.getElementById('submit-vote-btn').addEventListener('click', () => {
+          if (hasVoted) {
+            document.getElementById('vote-feedback').textContent = 'You have already voted.';
+            document.getElementById('vote-feedback').style.color = '#dc2626';
+            return;
+          }
+
+          const selected = document.querySelector('input[name="student-option"]:checked');
+          if (!selected) {
+            document.getElementById('vote-feedback').textContent = 'Please select an option first.';
+            document.getElementById('vote-feedback').style.color = '#dc2626';
+            return;
+          }
+
+          const optionIndex = parseInt(selected.value, 10);
+          if (!studentConnection || !studentConnection.open) {
+            document.getElementById('vote-feedback').textContent = 'Connection lost. Please refresh and try again.';
+            document.getElementById('vote-feedback').style.color = '#dc2626';
+            return;
+          }
+
+          // Send vote over P2P
+          studentConnection.send({ type: 'vote', optionIndex });
+
+          // Mark as voted (client-side only; anonymous)
+          hasVoted = true;
+          document.getElementById('submit-vote-btn').disabled = true;
+          document.getElementById('vote-feedback').textContent = '✅ Vote submitted! Thank you.';
+          document.getElementById('vote-feedback').style.color = '#22c55e';
+          document.getElementById('student-subtitle').textContent = 'Your response has been recorded anonymously.';
+        });
+      }
+
+      function showStudentError(msg) {
+        document.getElementById('student-question').textContent = '⚠️ Error';
+        document.getElementById('student-subtitle').textContent = msg;
+        document.getElementById('student-options').innerHTML = '';
+        document.getElementById('submit-vote-btn').disabled = true;
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+    })();
+  </script>
+</body>
+</html>
